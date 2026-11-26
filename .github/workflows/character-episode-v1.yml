@@ -1,11 +1,12 @@
-name: character episode v1
+name: character episode v2
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [main]
     paths:
       - 'assets/audio/**'
+      - 'assets/characters/**'
       - 'scripts/render_character_episode.py'
       - 'scripts/character_episode_qa.mjs'
       - 'src/production/audio-mixer.js'
@@ -60,7 +61,7 @@ jobs:
               assert hashlib.sha256(p.read_bytes()).hexdigest() == item['wav']['sha256']
           PY
 
-      - name: Validate renderer and original SVG unit tests
+      - name: Validate renderer and character/story unit tests
         id: validate
         run: |
           python3 -m py_compile scripts/render_character_episode.py
@@ -68,26 +69,60 @@ jobs:
           node --check scripts/character_episode_qa.mjs
 
       - name: Render 24 fps 1280x720 episode on CPU
+        id: render
         run: |
           python3 scripts/render_character_episode.py \
             --input-dir assets/audio \
-            --output-dir build/characters-v1
+            --output-dir build/characters-v2
 
       - name: Run current Audio Mix QA and Video QA
-        run: node scripts/character_episode_qa.mjs build/characters-v1
+        run: node scripts/character_episode_qa.mjs build/characters-v2
 
-      - name: Upload MP4, QA reports and three scene previews
-        if: always() && steps.validate.outcome == 'success'
+      - name: Upload v2 video
+        if: always() && steps.render.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: character-episode-v1-${{ github.run_id }}
+          name: character-episode-v2-video-${{ github.run_id }}
+          path: build/characters-v2/character-episode-v2.mp4
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scene 01 frame
+        if: always() && steps.render.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-scene-01-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-01.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scene 04 frame
+        if: always() && steps.render.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449b? # v4.6.2
+        with:
+          name: character-episode-v2-scene-04-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-04.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scene 08 frame
+        if: always() && steps.render.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449b? # v4.6.2
+        with:
+          name: character-episode-v2-scene-08-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-08.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload before-after comparison page
+        if: always() && steps.render.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449b? # v4.6.2
+        with:
+          name: character-episode-v2-before-after-${{ github.run_id }}
           path: |
-            build/characters-v1/character-episode-v1.mp4
-            build/characters-v1/render-report.json
-            build/characters-v1/audio-video-qa-report.json
-            build/characters-v1/frame-times.csv
-            build/characters-v1/preview-scenes/scene-01.png
-            build/characters-v1/preview-scenes/scene-04.png
-            build/characters-v1/preview-scenes/scene-08.png
+            build/characters-v2/before-after-comparison.png
+            build/characters-v2/before-after-comparison.svg
+            build/characters-v2/render-report.json
+            build/characters-v2/audio-video-qa-report.json
           if-no-files-found: warn
           retention-days: 7
