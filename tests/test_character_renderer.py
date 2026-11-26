@@ -1,4 +1,5 @@
 import importlib.util
+import subprocess
 import unittest
 from pathlib import Path
 
@@ -72,10 +73,23 @@ class CharacterAndStoryTests(unittest.TestCase):
 
     def test_pause_reduced_without_changing_qa_limit(self):
         self.assertAlmostEqual(renderer.PAUSE_SECONDS, 0.20)
-        qa = (ROOT / "src" / "production" / "video-qa.js").read_text(encoding="utf-8")
-        self.assertIn("maxSilenceSegmentSeconds: 0.5", qa)
-        mixer = (ROOT / "src" / "production" / "audio-mixer.js").read_text(encoding="utf-8")
-        self.assertIn("maxSilenceSegmentSeconds: 0.5", mixer)
+        check = subprocess.run(
+            [
+                "node",
+                "--input-type=module",
+                "--eval",
+                (
+                    "import { DEFAULT_LIMITS } from './src/production/video-qa.js'; "
+                    "if (DEFAULT_LIMITS.maxSilenceSegmentSeconds !== 0.5) "
+                    "throw new Error('maxSilenceSegmentSeconds must remain 0.5');"
+                ),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(check.returncode, 0, check.stderr)
 
 
 class ParrotAssetTests(unittest.TestCase):

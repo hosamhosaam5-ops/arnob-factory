@@ -1,133 +1,16 @@
-name: character episode v2
+name: retired character episode renderer (disabled)
 
 on:
-  pull_request:
-    types: [opened, synchronize]
-    branches: [main]
-    paths:
-      - 'assets/audio/**'
-      - 'assets/characters/**'
-      - 'scripts/render_character_episode.py'
-      - 'scripts/character_episode_qa.mjs'
-      - 'src/production/audio-mixer.js'
-      - 'src/production/video-qa.js'
-      - 'docs/**'
-      - 'tests/**'
-      - 'package.json'
-      - '.github/workflows/character-episode-v1.yml'
+  push:
+    branches:
+      - __disabled_character_episode_v1__
 
 permissions:
   contents: read
 
-concurrency:
-  group: character-episode-v2-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
-
 jobs:
-  render-once:
-    if: >-
-      github.event.pull_request.draft == true &&
-      github.event.pull_request.head.ref == 'feat/characters-v1-20261127' &&
-      github.run_attempt == 1 &&
-      github.run_number <= 3
+  retired:
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
     steps:
-      - name: Checkout exact PR revision
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
-        with:
-          persist-credentials: false
-
-      - name: Install CPU rendering and Arabic text dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0
-          python3 -c "from PIL import features; assert features.check('raqm'), 'Pillow RAQM is required'"
-          ffmpeg -version | head -n 1
-          rsvg-convert --version
-
-      - name: Verify exactly the approved audio inputs
-        run: |
-          test -f assets/audio/manifest.json
-          test "$(find assets/audio/chunks -maxdepth 1 -type f -name '*.wav' | wc -l)" -eq 8
-          test "$(find assets/audio/chunks -maxdepth 1 -type f | wc -l)" -eq 8
-          python3 - <<'PY'
-          import json, hashlib
-          from pathlib import Path
-          root = Path('assets/audio')
-          manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
-          assert manifest['episodeId'] == 'episode-pilot-1'
-          assert manifest['status'] == 'complete' and manifest['dryRun'] is False
-          assert len(manifest['completedChunks']) == 8
-          for item in manifest['completedChunks']:
-              p = root / item['wav']['path']
-              assert p.is_file() and p.stat().st_size == item['wav']['sizeBytes']
-              assert hashlib.sha256(p.read_bytes()).hexdigest() == item['wav']['sha256']
-          PY
-
-      - name: Validate renderer and character/story unit tests
-        id: validate
-        run: |
-          python3 -m py_compile scripts/render_character_episode.py
-          python3 -m unittest discover -s tests -v
-          node --check scripts/character_episode_qa.mjs
-
-      - name: Render 24 fps 1280x720 episode on CPU
-        id: render
-        run: |
-          python3 scripts/render_character_episode.py \
-            --input-dir assets/audio \
-            --output-dir build/characters-v2
-
-      - name: Run current Audio Mix QA and Video QA
-        run: node scripts/character_episode_qa.mjs build/characters-v2
-
-      - name: Upload v2 video
-        if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: character-episode-v2-video-${{ github.run_id }}
-          path: build/characters-v2/character-episode-v2.mp4
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload scene 01 frame
-        if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: character-episode-v2-scene-01-${{ github.run_id }}
-          path: build/characters-v2/preview-scenes/scene-01.png
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload scene 03 frame
-        if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: character-episode-v2-scene-03-${{ github.run_id }}
-          path: build/characters-v2/preview-scenes/scene-03.png
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload scene 08 frame
-        if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: character-episode-v2-scene-08-${{ github.run_id }}
-          path: build/characters-v2/preview-scenes/scene-08.png
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload before-after comparison page
-        if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: character-episode-v2-before-after-${{ github.run_id }}
-          path: |
-            build/characters-v2/before-after-comparison.png
-            build/characters-v2/before-after-comparison.svg
-            build/characters-v2/render-report.json
-            build/characters-v2/audio-video-qa-report.json
-          if-no-files-found: warn
-          retention-days: 7
+      - run: echo "Retired: use the gated v2 renderer workflow."
