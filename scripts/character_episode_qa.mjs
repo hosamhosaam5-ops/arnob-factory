@@ -11,7 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mediaDir = path.resolve(root, process.argv[2] ?? 'build/characters-v1');
 const inputDir = path.join(root, 'assets/audio');
 const chunkDir = path.join(inputDir, 'chunks');
-const outputMp4 = path.join(mediaDir, 'character-episode-v1.mp4');
+const outputMp4 = path.join(mediaDir, 'character-episode-v2.mp4');
 const outputMix = path.join(mediaDir, 'episode-audio-mix.wav');
 const reportPath = path.join(mediaDir, 'audio-video-qa-report.json');
 
@@ -97,7 +97,7 @@ async function main() {
 
   const report = {
     status: audioMix.status === 'pass' && videoQa.status === 'pass' ? 'pass' : 'fail',
-    versionName: 'نسخة شخصيات v1',
+    versionName: 'نسخة شخصيات v2',
     sourceManifestSha256: await sha256(path.join(inputDir, 'manifest.json')),
     sourceWavs: sourceFingerprints,
     sourceWavsUnmodified: JSON.stringify(sourceFingerprints.map(x => x.sha256)) ===
