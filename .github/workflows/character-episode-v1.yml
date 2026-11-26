@@ -2,7 +2,7 @@ name: character episode v2
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [main]
     paths:
       - 'assets/audio/**'
@@ -19,17 +19,22 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: character-episode-v2-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   render-once:
     if: >-
       github.event.pull_request.draft == true &&
       github.event.pull_request.head.ref == 'feat/characters-v1-20261127' &&
-      github.run_attempt == 1
+      github.run_attempt == 1 &&
+      github.run_number <= 3
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - name: Checkout exact PR revision
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
         with:
           persist-credentials: false
 
@@ -96,12 +101,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload scene 04 frame
+      - name: Upload scene 03 frame
         if: always() && steps.render.outcome == 'success'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: character-episode-v2-scene-04-${{ github.run_id }}
-          path: build/characters-v2/preview-scenes/scene-04.png
+          name: character-episode-v2-scene-03-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-03.png
           if-no-files-found: error
           retention-days: 7
 

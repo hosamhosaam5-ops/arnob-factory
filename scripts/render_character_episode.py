@@ -19,6 +19,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, features
 
 WIDTH, HEIGHT, FPS = 1280, 720, 24
+SELECTED_PREVIEW_SCENE_IDS = (0, 2, 3, 7)
 PALETTE = {
     "cream": "#FFF5E6",
     "honey": "#F2C47D",
@@ -677,7 +678,7 @@ def render(args) -> dict:
     total_frames = math.ceil(audio_duration * FPS)
     frame_rows: list[tuple[int, int, float, float]] = []
     boundaries = [scene["startSeconds"] for scene in scenes]
-    selected_scene_ids = {0, 3, 7}
+    selected_scene_ids = set(SELECTED_PREVIEW_SCENE_IDS)
     selected_frame_numbers: set[int] = set()
     for scene_index in selected_scene_ids:
         center = (scenes[scene_index]["startSeconds"] + scenes[scene_index]["endSeconds"]) / 2

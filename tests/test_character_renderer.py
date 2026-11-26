@@ -25,6 +25,11 @@ class MouthEnvelopeTests(unittest.TestCase):
 
 
 class CharacterAndStoryTests(unittest.TestCase):
+    def test_preview_selection_includes_seed_digging_and_comparison_scene(self):
+        self.assertEqual(set(renderer.SELECTED_PREVIEW_SCENE_IDS), {0, 2, 3, 7})
+        self.assertIn(2, renderer.SELECTED_PREVIEW_SCENE_IDS)
+        self.assertIn(3, renderer.SELECTED_PREVIEW_SCENE_IDS)
+
     def test_non_speaking_character_has_closed_mouth(self):
         cat = renderer.cat_svg(0, 0, 0.8, 1.0, False, 0, 0)
         mouse = renderer.mouse_svg(0, 0, 0.8, 1.0, False, 0, 0)

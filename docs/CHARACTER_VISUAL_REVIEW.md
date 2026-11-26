@@ -25,7 +25,9 @@
 
 ينشئ التشغيل ملفات مستقلة:
 - preview-scenes/scene-01.png
-- preview-scenes/scene-04.png
+- preview-scenes/scene-03.png (contains the digging spoon and visible seed)
 - preview-scenes/scene-08.png
+
+The before/after page still uses scenes 1, 4 and 8; scene 4 is retained as an extra generated preview for that comparison.
 
 هذه النسخة للمراجعة الفنية وليست اعتماداً نهائياً للحلقة.
