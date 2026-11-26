@@ -2,7 +2,7 @@ name: character episode v2
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened]
     branches: [main]
     paths:
       - 'assets/audio/**'
@@ -98,7 +98,7 @@ jobs:
 
       - name: Upload scene 04 frame
         if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449b? # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: character-episode-v2-scene-04-${{ github.run_id }}
           path: build/characters-v2/preview-scenes/scene-04.png
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload scene 08 frame
         if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449b? # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: character-episode-v2-scene-08-${{ github.run_id }}
           path: build/characters-v2/preview-scenes/scene-08.png
@@ -116,7 +116,7 @@ jobs:
 
       - name: Upload before-after comparison page
         if: always() && steps.render.outcome == 'success'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449b? # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: character-episode-v2-before-after-${{ github.run_id }}
           path: |
