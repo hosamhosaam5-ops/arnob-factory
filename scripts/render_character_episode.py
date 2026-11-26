@@ -643,6 +643,18 @@ def write_before_after_comparison(preview_dir: Path, baseline_dir: Path,
     return svg_path, png_path
 
 
+def smoke_scene_window(scenes: list[dict], seconds: float) -> list[dict]:
+    """Clip smoke renders to the first scene only, without altering episode timing."""
+    if not math.isfinite(seconds) or seconds != 3.0:
+        raise ValueError("Smoke renders must be exactly 3.0 seconds")
+    if not scenes or float(scenes[0]["durationSeconds"]) < seconds:
+        raise RuntimeError("The first scene is shorter than the required three-second smoke window")
+    first = dict(scenes[0])
+    first["durationSeconds"] = seconds
+    first["endSeconds"] = round(first["startSeconds"] + seconds, 6)
+    return [first]
+
+
 def render(args) -> dict:
     started = time.perf_counter()
     input_dir, output_dir = Path(args.input_dir), Path(args.output_dir)
@@ -671,6 +683,20 @@ def render(args) -> dict:
     if abs(cursor - audio_duration) > 0.03:
         raise RuntimeError("Scene timeline differs from the prepared WAV timeline")
 
+    if args.smoke_seconds is not None:
+        scenes = smoke_scene_window(scenes, args.smoke_seconds)
+        smoke_voice_track = output_dir / "episode-audio-smoke.wav"
+        media([
+            "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+            "-i", str(voice_track), "-t", "3.0", "-ar", "24000", "-ac", "1",
+            "-c:a", "pcm_s16le", str(smoke_voice_track)
+        ])
+        if abs(probe_duration(smoke_voice_track) - 3.0) > 0.03:
+            raise RuntimeError("Smoke voice track is not exactly three seconds")
+        smoke_voice_track.replace(voice_track)
+        audio_duration = 3.0
+        envelopes = envelopes[:1]
+
     frames_dir = output_dir / "frames"
     frames_dir.mkdir(parents=True, exist_ok=True)
     preview_dir = output_dir / "preview-scenes"
@@ -678,7 +704,7 @@ def render(args) -> dict:
     total_frames = math.ceil(audio_duration * FPS)
     frame_rows: list[tuple[int, int, float, float]] = []
     boundaries = [scene["startSeconds"] for scene in scenes]
-    selected_scene_ids = set(SELECTED_PREVIEW_SCENE_IDS)
+    selected_scene_ids = {0} if args.smoke_seconds is not None else set(SELECTED_PREVIEW_SCENE_IDS)
     selected_frame_numbers: set[int] = set()
     for scene_index in selected_scene_ids:
         center = (scenes[scene_index]["startSeconds"] + scenes[scene_index]["endSeconds"]) / 2
@@ -717,7 +743,12 @@ def render(args) -> dict:
         if sha256(source) != item["wav"]["sha256"]:
             raise RuntimeError(f"Source WAV changed after rendering: {source.name}")
 
-    comparison_svg, comparison_png = write_before_after_comparison(preview_dir, Path("docs/preview"), output_dir)
+    if args.smoke_seconds is None:
+        comparison_svg, comparison_png = write_before_after_comparison(
+            preview_dir, Path("docs/preview"), output_dir
+        )
+    else:
+        comparison_svg = comparison_png = None
 
     frame_csv = output_dir / "frame-times.csv"
     with frame_csv.open("w", newline="", encoding="utf-8") as handle:
@@ -812,7 +843,11 @@ def render(args) -> dict:
             "probe": probe,
         },
         "previewFrames": preview_times,
-        "beforeAfterComparison": {"svg": comparison_svg.name, "png": comparison_png.name, "referenceScenes": [1, 4, 8]},
+        "smokeSeconds": args.smoke_seconds,
+        "beforeAfterComparison": (
+            {"svg": comparison_svg.name, "png": comparison_png.name, "referenceScenes": [1, 4, 8]}
+            if comparison_svg is not None and comparison_png is not None else None
+        ),
     }
     (output_dir / "render-report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({k: report[k] for k in ["status", "framesWritten", "frameRasterizeSeconds", "rasterizeWallSeconds", "fiveMinuteEstimate", "picture"]}, ensure_ascii=False, indent=2), flush=True)
@@ -887,6 +922,8 @@ def main() -> None:
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--preview-set", action="store_true")
+    parser.add_argument("--smoke-seconds", type=float, default=None,
+                        help="Render exactly three seconds of the first scene for pipeline smoke tests")
     args = parser.parse_args()
     if args.preview_set:
         write_preview_set(Path(args.input_dir), Path(args.output_dir))

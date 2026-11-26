@@ -32,6 +32,21 @@ class CharacterAndStoryTests(unittest.TestCase):
         self.assertIn(2, renderer.SELECTED_PREVIEW_SCENE_IDS)
         self.assertIn(3, renderer.SELECTED_PREVIEW_SCENE_IDS)
 
+    def test_three_second_smoke_window_uses_only_first_scene(self):
+        scenes = [
+            {"index": 1, "startSeconds": 0.0, "durationSeconds": 6.0, "endSeconds": 6.0},
+            {"index": 2, "startSeconds": 6.2, "durationSeconds": 5.0, "endSeconds": 11.2},
+        ]
+        clipped = renderer.smoke_scene_window(scenes, 3.0)
+        self.assertEqual(len(clipped), 1)
+        self.assertEqual(clipped[0]["index"], 1)
+        self.assertEqual(clipped[0]["durationSeconds"], 3.0)
+        self.assertEqual(clipped[0]["endSeconds"], 3.0)
+        with self.assertRaises(ValueError):
+            renderer.smoke_scene_window(scenes, 2.0)
+        with self.assertRaises(RuntimeError):
+            renderer.smoke_scene_window([{"startSeconds": 0.0, "durationSeconds": 2.5}], 3.0)
+
     def test_all_scene_frames_are_well_formed_svg_xml(self):
         for scene_index in range(8):
             scene = {
