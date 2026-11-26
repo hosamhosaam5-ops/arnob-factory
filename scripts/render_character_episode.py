@@ -177,14 +177,14 @@ def make_audio_timeline(input_dir: Path, output_dir: Path, manifest: dict,
             "envelope": envelope,
         })
         trimmed_paths.append(target)
-    pause = output_dir / "pause-0.35s.wav"
+    pause = output_dir / "pause-0.20s.wav"
     media([
         "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
         "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", str(PAUSE_SECONDS),
         "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(pause)
     ])
     if abs(probe_duration(pause) - PAUSE_SECONDS) > 0.001:
-        raise RuntimeError("Could not create the fixed 0.35-second pause")
+        raise RuntimeError("Could not create the fixed 0.20-second pause")
     concat = output_dir / "episode-audio-concat.txt"
     entries: list[str] = []
     for i, path in enumerate(trimmed_paths):
