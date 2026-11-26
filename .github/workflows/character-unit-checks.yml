@@ -27,10 +27,15 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install test-only Pillow dependency
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+
       - name: Python compile and unit tests
         run: |
-          python3 -m compileall -q scripts tests
-          python3 -m unittest discover -s tests -v
+          .venv/bin/python -m compileall -q scripts tests
+          .venv/bin/python -m unittest discover -s tests -v
 
       - name: Node syntax checks
         run: |
