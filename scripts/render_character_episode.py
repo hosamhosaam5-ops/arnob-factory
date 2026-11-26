@@ -281,11 +281,11 @@ def cat_svg(x: float, base_y: float, level: float, seconds: float,
     if not active:
         expression = "listening"
     brows = {
-        "surprise": '<path d="M-51,-151 Q-29,-181 -7,-153 M7,-153 Q29,-181 51,-151"/>',
-        "clever": '<path d="M-51,-151 Q-30,-165 -8,-145 M8,-158 Q31,-178 51,-155"/>',
-        "listening": '<path d="M-51,-151 Q-30,-173 -8,-155 M8,-147 Q29,-166 51,-150"/>',
-        "excited": '<path d="M-51,-151 Q-29,-180 -7,-157 M7,-157 Q29,-180 51,-151"/>',
-    }.get(expression, '<path d="M-51,-151 Q-29,-176 -7,-155 M7,-155 Q29,-176 51,-151"/>')
+        "surprise": "M-51,-151 Q-29,-181 -7,-153 M7,-153 Q29,-181 51,-151",
+        "clever": "M-51,-151 Q-30,-165 -8,-145 M8,-158 Q31,-178 51,-155",
+        "listening": "M-51,-151 Q-30,-173 -8,-155 M8,-147 Q29,-166 51,-150",
+        "excited": "M-51,-151 Q-29,-180 -7,-157 M7,-157 Q29,-180 51,-151",
+    }.get(expression, "M-51,-151 Q-29,-176 -7,-155 M7,-155 Q29,-176 51,-151")
     eye_h = max(3.0, 24.0 * (1.0 - blink * 0.94))
     return f'''<g transform="translate({x + camera_shift:.2f},{base_y - bounce:.2f})">
       <ellipse cx="0" cy="5" rx="125" ry="17" fill="#57412E" opacity=".16" filter="url(#softShadow)"/>
@@ -351,9 +351,9 @@ def mouse_svg(x: float, base_y: float, level: float, seconds: float,
     mouth = mouth_shape(level) if active else "closed"
     eye_h = max(2.5, 18.0 * (1.0 - blink * 0.94))
     if not active:
-        brows = '<path d="M-35,-104 Q-20,-119 -6,-105 M6,-108 Q22,-118 36,-103"/>'
+        brows = "M-35,-104 Q-20,-119 -6,-105 M6,-108 Q22,-118 36,-103"
     else:
-        brows = '<path d="M-35,-104 Q-20,-121 -6,-106 M6,-106 Q22,-121 36,-104"/>'
+        brows = "M-35,-104 Q-20,-121 -6,-106 M6,-106 Q22,-121 36,-104"
     return f'''<g transform="translate({x + camera_shift:.2f},{base_y - bounce:.2f}) scale({breath:.4f})">
       <ellipse cx="0" cy="5" rx="87" ry="14" fill="#57412E" opacity=".16" filter="url(#softShadow)"/>
       <path d="M44,-23 C112,-45 147,-16 132,20 C121,45 89,43 83,22"

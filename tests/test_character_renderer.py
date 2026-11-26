@@ -1,5 +1,6 @@
 import importlib.util
 import subprocess
+import xml.etree.ElementTree as ET
 import unittest
 from pathlib import Path
 
@@ -30,6 +31,24 @@ class CharacterAndStoryTests(unittest.TestCase):
         self.assertEqual(set(renderer.SELECTED_PREVIEW_SCENE_IDS), {0, 2, 3, 7})
         self.assertIn(2, renderer.SELECTED_PREVIEW_SCENE_IDS)
         self.assertIn(3, renderer.SELECTED_PREVIEW_SCENE_IDS)
+
+    def test_all_scene_frames_are_well_formed_svg_xml(self):
+        for scene_index in range(8):
+            scene = {
+                "speakerId": "pistachio" if scene_index % 2 == 0 else "hazelnut",
+                "text": "اِخْتِبَارُ مَشْهَدٍ",
+            }
+            svg = renderer.svg_frame(
+                scene,
+                scene_index,
+                0.0,
+                0.0,
+                include_text=False,
+                local_time=0.0,
+                scene_duration=1.0,
+            )
+            with self.subTest(scene_index=scene_index):
+                ET.fromstring(svg)
 
     def test_non_speaking_character_has_closed_mouth(self):
         cat = renderer.cat_svg(0, 0, 0.8, 1.0, False, 0, 0)
