@@ -1,0 +1,9 @@
+{
+  "name": "arnob-factory-character-episode-v1",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "qa:episode": "node scripts/character_episode_qa.mjs build/characters-v1"
+  }
+}

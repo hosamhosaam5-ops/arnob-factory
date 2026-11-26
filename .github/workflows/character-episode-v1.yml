@@ -1,0 +1,93 @@
+name: character episode v1
+
+on:
+  pull_request:
+    types: [opened]
+    branches: [main]
+    paths:
+      - 'assets/audio/**'
+      - 'scripts/render_character_episode.py'
+      - 'scripts/character_episode_qa.mjs'
+      - 'src/production/audio-mixer.js'
+      - 'src/production/video-qa.js'
+      - 'docs/**'
+      - 'tests/**'
+      - 'package.json'
+      - '.github/workflows/character-episode-v1.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  render-once:
+    if: >-
+      github.event.pull_request.draft == true &&
+      github.event.pull_request.head.ref == 'feat/characters-v1-20261127' &&
+      github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact PR revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install CPU rendering and Arabic text dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0
+          python3 -c "from PIL import features; assert features.check('raqm'), 'Pillow RAQM is required'"
+          ffmpeg -version | head -n 1
+          rsvg-convert --version
+
+      - name: Verify exactly the approved audio inputs
+        run: |
+          test -f assets/audio/manifest.json
+          test "$(find assets/audio/chunks -maxdepth 1 -type f -name '*.wav' | wc -l)" -eq 8
+          test "$(find assets/audio/chunks -maxdepth 1 -type f | wc -l)" -eq 8
+          python3 - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          root = Path('assets/audio')
+          manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+          assert manifest['episodeId'] == 'episode-pilot-1'
+          assert manifest['status'] == 'complete' and manifest['dryRun'] is False
+          assert len(manifest['completedChunks']) == 8
+          for item in manifest['completedChunks']:
+              p = root / item['wav']['path']
+              assert p.is_file() and p.stat().st_size == item['wav']['sizeBytes']
+              assert hashlib.sha256(p.read_bytes()).hexdigest() == item['wav']['sha256']
+          PY
+
+      - name: Validate renderer and original SVG unit tests
+        id: validate
+        run: |
+          python3 -m py_compile scripts/render_character_episode.py
+          python3 -m unittest discover -s tests -v
+          node --check scripts/character_episode_qa.mjs
+
+      - name: Render 24 fps 1280x720 episode on CPU
+        run: |
+          python3 scripts/render_character_episode.py \
+            --input-dir assets/audio \
+            --output-dir build/characters-v1
+
+      - name: Run current Audio Mix QA and Video QA
+        run: node scripts/character_episode_qa.mjs build/characters-v1
+
+      - name: Upload MP4, QA reports and three scene previews
+        if: always() && steps.validate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v1-${{ github.run_id }}
+          path: |
+            build/characters-v1/character-episode-v1.mp4
+            build/characters-v1/render-report.json
+            build/characters-v1/audio-video-qa-report.json
+            build/characters-v1/frame-times.csv
+            build/characters-v1/preview-scenes/scene-01.png
+            build/characters-v1/preview-scenes/scene-04.png
+            build/characters-v1/preview-scenes/scene-08.png
+          if-no-files-found: warn
+          retention-days: 7
