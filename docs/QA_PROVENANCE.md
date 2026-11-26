@@ -8,3 +8,5 @@ The video and audio quality modules are copied byte-for-byte from the approved p
 The episode wrapper calls `mixAudioForVideo()` and `inspectVideoQuality()` with their default limits. It does not override, bypass, or weaken thresholds. No music or sound effects are added; the mixer's required bed input is generated digital silence.
 
 The current default gates include continuous silence <= 0.5 s, A/V duration difference <= 0.15 s, black segment <= 0.25 s, H.264/AAC streams, maximum duration 300 s and maximum file size 512 MiB. Audio Mix QA also checks PCM s16le, 48 kHz stereo, A/V duration difference <= 0.15 s and continuous silence <= 0.5 s.
+
+The v2 renderer reduces the inter-chunk digital pause from 0.35 s to 0.20 s to increase the measured silence margin. This changes only the generated timeline; the Audio Mix QA and Video QA defaults are not overridden, weakened or edited. The 0.50 s continuous-silence limit remains unchanged.
