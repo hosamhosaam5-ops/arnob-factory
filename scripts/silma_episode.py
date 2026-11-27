@@ -666,6 +666,26 @@ def run_real(
                 "aggregateCpuRtf": round(total_cpu / total_audio, 6),
             }
         else:
+            total_cpu = sum(
+                float(item["timing"]["cpuSeconds"])
+                for item in manifest["completedChunks"]
+            )
+            total_wall = sum(
+                float(item["timing"]["wallSeconds"])
+                for item in manifest["completedChunks"]
+            )
+            total_audio = sum(
+                float(item["timing"]["audioDurationSeconds"])
+                for item in manifest["completedChunks"]
+            )
+            manifest["measurementSummary"] = {
+                "scope": "single-chunk",
+                "totalInferenceCpuSeconds": round(total_cpu, 6),
+                "totalInferenceWallSeconds": round(total_wall, 6),
+                "totalSpeechAudioSeconds": round(total_audio, 6),
+                "aggregateWallRtf": round(total_wall / total_audio, 6),
+                "aggregateCpuRtf": round(total_cpu / total_audio, 6),
+            }
             manifest["partialGeneration"] = {
                 "chunkId": selected_chunk_id,
                 "seed": seed_override,
