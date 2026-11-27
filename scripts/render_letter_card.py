@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """Original animated Arabic Alif card using the existing SVG character engine."""
 from __future__ import annotations
-import argparse, hashlib, json, math, subprocess, sys, time
+import argparse
+import hashlib
+import json
+import math
+import subprocess
+import sys
+import time
 from pathlib import Path
 from typing import Any
 from PIL import Image, ImageDraw, ImageFont, features
@@ -16,25 +22,33 @@ EXAMPLE="حَرْفُ الْأَلِفِ: أَرْنَبٌ، أَسَدٌ، أُ
 def sha(p:Path)->str:
  d=hashlib.sha256()
  with p.open("rb") as f:
-  for b in iter(lambda:f.read(1024*1024),b""):d.update(b)
+  for b in iter(lambda:f.read(1024*1024),b""):
+      d.update(b)
  return d.hexdigest()
 
 def run(cmd:list[str],timeout:int=180)->None:
- try: subprocess.run(cmd,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout)
- except subprocess.CalledProcessError as e: raise RuntimeError((e.stderr or e.stdout or str(e))[-4000:]) from e
+ try:
+     subprocess.run(cmd,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,timeout=timeout)
+ except subprocess.CalledProcessError as e:
+     raise RuntimeError((e.stderr or e.stdout or str(e))[-4000:]) from e
 
 def duration(p:Path)->float:
  x=float(subprocess.check_output(["ffprobe","-v","error","-show_entries","format=duration","-of","default=noprint_wrappers=1:nokey=1",str(p)],text=True).strip())
- if not math.isfinite(x) or x<=0:raise RuntimeError("Invalid media duration: "+p.name)
+ if not math.isfinite(x) or x<=0:
+     raise RuntimeError("Invalid media duration: "+p.name)
  return x
 
 def verify_smoke_source(manifest_path:Path,wav_path:Path)->dict[str,Any]:
  m=json.loads(manifest_path.read_text(encoding="utf-8"))
- if m.get("status")!="complete" or m.get("dryRun") is not False:raise RuntimeError("Smoke manifest is not a completed real run")
+ if m.get("status")!="complete" or m.get("dryRun") is not False:
+     raise RuntimeError("Smoke manifest is not a completed real run")
  matches=[x for x in m.get("completedChunks",[]) if Path(x.get("wav",{}).get("path","")).name==wav_path.name]
- if len(matches)!=1:raise RuntimeError("Smoke source must map to exactly one manifest chunk")
- row=matches[0]["wav"]; actual=sha(wav_path)
- if actual!=row.get("sha256") or wav_path.stat().st_size!=int(row.get("sizeBytes",-1)):raise RuntimeError("Smoke WAV SHA/size mismatch")
+ if len(matches)!=1:
+     raise RuntimeError("Smoke source must map to exactly one manifest chunk")
+ row=matches[0]["wav"]
+ actual=sha(wav_path)
+ if actual!=row.get("sha256") or wav_path.stat().st_size!=int(row.get("sizeBytes",-1)):
+     raise RuntimeError("Smoke WAV SHA/size mismatch")
  return {"path":wav_path.as_posix(),"sha256":actual,"sizeBytes":wav_path.stat().st_size,"episodeId":m.get("episodeId"),"chunkId":matches[0].get("chunkId")}
 
 def rabbit(cx:int,cy:int,s:float,t:float)->str:
@@ -82,7 +96,8 @@ def card_svg(speaker:str,t:float,level:float,highlight:int=-1)->str:
  arts=(rabbit(425,374,.68,t),lion(605,374,.68,t),ear(785,375,.76,t),needle(970,374,.8,t))
  tiles=[]
  for i,(cx,drawing) in enumerate(zip(centers,arts)):
-  color="#E0A84F" if i==highlight else "#D9D5C8"; width=6 if i==highlight else 3
+  color="#E0A84F" if i==highlight else "#D9D5C8"
+  width=6 if i==highlight else 3
   tiles.append(f'<rect x="{cx-78}" y="292" width="156" height="165" rx="24" fill="#FFFCF5" stroke="{color}" stroke-width="{width}"/>'+drawing+f'<text x="{cx}" y="443" text-anchor="middle" direction="rtl" unicode-bidi="plaintext" font-family="Noto Sans Arabic, sans-serif" font-size="22" font-weight="700" fill="#3C5546">{WORDS[i]}</text>')
  rays=[]
  for i in range(20):
@@ -110,87 +125,132 @@ def card_svg(speaker:str,t:float,level:float,highlight:int=-1)->str:
  </svg>'''
 
 def draw_caption(path:Path,text:str)->None:
- if not features.check("raqm"):raise RuntimeError("Pillow RAQM required for Arabic shaping")
+ if not features.check("raqm"):
+     raise RuntimeError("Pillow RAQM required for Arabic shaping")
  fonts=("/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf","/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf")
  font_path=next((p for p in fonts if Path(p).is_file()),None)
- if font_path is None:raise RuntimeError("Noto Arabic font missing")
- selected=None; lines=[]
+ if font_path is None:
+     raise RuntimeError("Noto Arabic font missing")
+ selected=None
+ lines=[]
  for size in (28,27,26,25,24,23):
   f=ImageFont.truetype(font_path,size,layout_engine=ImageFont.Layout.RAQM)
   wrapped=engine.wrap_arabic(text,font=f,max_width=1080)
-  if len(wrapped)<=2:selected,lines=f,wrapped;break
- if selected is None:raise RuntimeError("Caption does not fit two lines")
- image=Image.open(path).convert("RGB"); draw=ImageDraw.Draw(image)
+  if len(wrapped)<=2:
+      selected,lines=f,wrapped
+      break
+ if selected is None:
+     raise RuntimeError("Caption does not fit two lines")
+ image=Image.open(path).convert("RGB")
+ draw=ImageDraw.Draw(image)
  ys=(636,668) if len(lines)==2 else (652,)
- for line,y in zip(lines,ys):draw.text((640,y),line,font=selected,fill="#29483B",anchor="mm",direction="rtl",language="ar")
+ for line,y in zip(lines,ys):
+     draw.text((640,y),line,font=selected,fill="#29483B",anchor="mm",direction="rtl",language="ar")
  image.save(path,format="PNG",optimize=False)
 
 def raster(svg:str,path:Path)->None:
- svg_path=path.with_suffix(".svg"); svg_path.write_text(svg,encoding="utf-8")
+ svg_path=path.with_suffix(".svg")
+ svg_path.write_text(svg,encoding="utf-8")
  run(["rsvg-convert","--width",str(W), "--height",str(H),"--output",str(path),str(svg_path)],45)
 
 def smoke(args:argparse.Namespace)->dict[str,Any]:
  source=Path(args.source_wav).resolve(strict=True)
  fp=verify_smoke_source(Path(args.source_manifest).resolve(strict=True),source)
- out=Path(args.output_dir).resolve(); out.mkdir(parents=True,exist_ok=True)
- png=out/"letter-card-smoke.png"; raster(card_svg("pistachio",0,.0),png); draw_caption(png,EXAMPLE)
+ out=Path(args.output_dir).resolve()
+ out.mkdir(parents=True,exist_ok=True)
+ png=out/"letter-card-smoke.png"
+ raster(card_svg("pistachio",0,.0),png)
+ draw_caption(png,EXAMPLE)
  mp4=out/"letter-card-smoke.mp4"
  run(["ffmpeg","-hide_banner","-nostdin","-loglevel","error","-y","-loop","1","-framerate",str(FPS),"-i",str(png),"-i",str(source),"-t","2.5","-map","0:v:0","-map","1:a:0","-vf","format=yuv420p","-c:v","libx264","-preset","ultrafast","-threads","2","-c:a","aac","-shortest","-movflags","+faststart",str(mp4)],90)
- if sha(source)!=fp["sha256"]:raise RuntimeError("Smoke source WAV was modified")
+ if sha(source)!=fp["sha256"]:
+     raise RuntimeError("Smoke source WAV was modified")
  report={"status":"pass","source":fp,"sourceUnmodified":True,"letter":"أ","svgDrawings":["rabbit","lion","ear","needle"],"pngSha256":sha(png),"mp4Sha256":sha(mp4),"durationSeconds":round(duration(mp4),6)}
  (out/"smoke-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
- print(json.dumps(report,ensure_ascii=False,indent=2),flush=True); return report
+ print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)
+ return report
 
 def make_voice(root:Path,out:Path,chunks:list[dict[str,Any]])->tuple[Path,list[dict[str,Any]]]:
  pause=out/"pause-0.20s.wav"
  run(["ffmpeg","-hide_banner","-nostdin","-loglevel","error","-y","-f","lavfi","-i","anullsrc=r=24000:cl=mono","-t",str(PAUSE),"-ar","24000","-ac","1","-c:a","pcm_s16le",str(pause)])
- lines=[]; details=[]
+ lines=[]
+ details=[]
  for i,item in enumerate(chunks):
   wav=root/item["wav"]["path"]
-  if sha(wav)!=item["wav"]["sha256"]:raise RuntimeError("Input WAV SHA mismatch: "+wav.name)
+  if sha(wav)!=item["wav"]["sha256"]:
+      raise RuntimeError("Input WAV SHA mismatch: "+wav.name)
   lines.append("file '"+wav.resolve().as_posix().replace("'","'\\''")+"'")
   details.append({"item":item,"wav":wav})
-  if i<len(chunks)-1:lines.append("file '"+pause.resolve().as_posix()+"'")
- listing=out/"voice-concat.txt"; listing.write_text("\n".join(lines)+"\n",encoding="utf-8")
+  if i<len(chunks)-1:
+      lines.append("file '"+pause.resolve().as_posix()+"'")
+ listing=out/"voice-concat.txt"
+ listing.write_text("\n".join(lines)+"\n",encoding="utf-8")
  voice=out/"episode-audio.wav"
  run(["ffmpeg","-hide_banner","-nostdin","-loglevel","error","-y","-f","concat","-safe","0","-i",str(listing),"-map","0:a:0","-ar","24000","-ac","1","-c:a","pcm_s16le",str(voice)],300)
  return voice,details
 
 def full_render(root:Path,out:Path)->dict[str,Any]:
- started=time.perf_counter(); manifest_path=root/"manifest.json"
+ started=time.perf_counter()
+ manifest_path=root/"manifest.json"
  m=json.loads(manifest_path.read_text(encoding="utf-8"))
- if m.get("status")!="complete" or m.get("dryRun") is not False or m.get("modelInferenceInvoked") is not True:raise RuntimeError("Renderer requires a completed real SILMA run")
- if m.get("episodeId")!="letter-alif" or m.get("method")!="A" or m.get("nfeStep")!=16:raise RuntimeError("Unexpected episode or synthesis settings")
+ if m.get("status")!="complete" or m.get("dryRun") is not False or m.get("modelInferenceInvoked") is not True:
+     raise RuntimeError("Renderer requires a completed real SILMA run")
+ if m.get("episodeId")!="letter-alif" or m.get("method")!="A" or m.get("nfeStep")!=16:
+     raise RuntimeError("Unexpected episode or synthesis settings")
  chunks=m.get("completedChunks",[])
- if len(chunks)!=8:raise RuntimeError("Exactly eight chunks required")
+ if len(chunks)!=8:
+     raise RuntimeError("Exactly eight chunks required")
  for i,c in enumerate(chunks):
-  if c.get("speakerId")!=("pistachio" if i%2==0 else "hazelnut"):raise RuntimeError("Unexpected speaker order")
- out.mkdir(parents=True,exist_ok=True); voice,details=make_voice(root,out,chunks)
- timeline=[]; envelopes=[]; cursor=0.
+  if c.get("speakerId")!=("pistachio" if i%2==0 else "hazelnut"):
+      raise RuntimeError("Unexpected speaker order")
+ out.mkdir(parents=True,exist_ok=True)
+ voice,details=make_voice(root,out,chunks)
+ timeline=[]
+ envelopes=[]
+ cursor=0.
  for i,d in enumerate(details):
-  vals,_=engine.rms_envelope(d["wav"]); envelopes.append(vals)
+  vals,_=engine.rms_envelope(d["wav"])
+  envelopes.append(vals)
   dur=float(d["item"]["wav"]["durationSeconds"])
   timeline.append({"speaker":d["item"]["speakerId"],"text":d["item"]["text"],"start":cursor,"duration":dur})
   cursor+=dur+(PAUSE if i<7 else 0)
- total=math.ceil(cursor*FPS); frames=out/"frames"; preview=out/"preview"
- frames.mkdir(parents=True,exist_ok=True); preview.mkdir(parents=True,exist_ok=True)
+ total=math.ceil(cursor*FPS)
+ frames=out/"frames"
+ preview=out/"preview"
+ frames.mkdir(parents=True,exist_ok=True)
+ preview.mkdir(parents=True,exist_ok=True)
  frame_wall=0.
  for n in range(1,total+1):
-  t=(n-1)/FPS; idx=max(i for i,x in enumerate(timeline) if x["start"]<=t); row=timeline[idx]
-  local=t-row["start"]; level=0. if local>=row["duration"] else envelopes[idx]["values"][min(len(envelopes[idx]["values"])-1,max(0,int(local*FPS)))]
-  p=frames/("frame_%06d.png"%n); before=time.perf_counter()
-  raster(card_svg(row["speaker"],t,level),p); draw_caption(p,row["text"])
+  t=(n-1)/FPS
+  idx=max(i for i,x in enumerate(timeline) if x["start"]<=t)
+  row=timeline[idx]
+  local=t-row["start"]
+  level=0. if local>=row["duration"] else envelopes[idx]["values"][min(len(envelopes[idx]["values"])-1,max(0,int(local*FPS)))]
+  p=frames/("frame_%06d.png"%n)
+  before=time.perf_counter()
+  raster(card_svg(row["speaker"],t,level),p)
+  draw_caption(p,row["text"])
   frame_wall+=time.perf_counter()-before
-  if n%120==0:print("letter-card-frames="+str(n)+"/"+str(total),flush=True)
+  if n%120==0:
+      print("letter-card-frames="+str(n)+"/"+str(total),flush=True)
  # Three explicit deliverable stills.
- p=preview/"letter-card.png"; raster(card_svg("pistachio",1,.2),p); draw_caption(p,EXAMPLE)
- p=preview/"word-rabbit.png"; raster(card_svg("pistachio",2,.35,0),p); draw_caption(p,"أَرْنَبٌ")
- last=timeline[-1]; p=preview/"final-scene.png"; raster(card_svg(last["speaker"],cursor,0),p); draw_caption(p,last["text"])
+ p=preview/"letter-card.png"
+ raster(card_svg("pistachio",1,.2),p)
+ draw_caption(p,EXAMPLE)
+ p=preview/"word-rabbit.png"
+ raster(card_svg("pistachio",2,.35,0),p)
+ draw_caption(p,"أَرْنَبٌ")
+ last=timeline[-1]
+ p=preview/"final-scene.png"
+ raster(card_svg(last["speaker"],cursor,0),p)
+ draw_caption(p,last["text"])
  raw=out/"letter-card-video-raw.mp4"
  run(["ffmpeg","-hide_banner","-nostdin","-loglevel","error","-y","-framerate",str(FPS),"-i",str(frames/"frame_%06d.png"),"-frames:v",str(total),"-an","-c:v","libx264","-preset","veryfast","-crf","20","-threads","2","-pix_fmt","yuv420p","-r",str(FPS),"-movflags","+faststart",str(raw)],300)
- if abs(duration(raw)-duration(voice))>.08:raise RuntimeError("Audio/video durations differ")
+ if abs(duration(raw)-duration(voice))>.08:
+     raise RuntimeError("Audio/video durations differ")
  for d in details:
-  if sha(d["wav"])!=d["item"]["wav"]["sha256"]:raise RuntimeError("Source WAV modified during render")
+  if sha(d["wav"])!=d["item"]["wav"]["sha256"]:
+      raise RuntimeError("Source WAV modified during render")
  report={"status":"rendered-awaiting-qa","episodeId":"letter-alif","sourceManifestSha256":sha(manifest_path),
   "episodeScriptSha256":m.get("episodeScriptSha256"),"sourceWavCount":8,
   "sourceWavSha256":[x["item"]["wav"]["sha256"] for x in details],
@@ -202,14 +262,24 @@ def full_render(root:Path,out:Path)->dict[str,Any]:
   "renderWallSeconds":round(time.perf_counter()-started,3),"frameRasterWallSeconds":round(frame_wall,3),
   "visualAssets":"original-code-generated-svg","rasterizer":"librsvg rsvg-convert","sourceWavsUnmodified":True}
  (out/"render-report.json").write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
- print(json.dumps(report,ensure_ascii=False,indent=2),flush=True); return report
+ print(json.dumps(report,ensure_ascii=False,indent=2),flush=True)
+ return report
 
 def main()->None:
- ap=argparse.ArgumentParser(); ap.add_argument("--smoke",action="store_true"); ap.add_argument("--source-manifest"); ap.add_argument("--source-wav"); ap.add_argument("--generation-dir"); ap.add_argument("--output-dir",required=True); a=ap.parse_args()
+ ap=argparse.ArgumentParser()
+ ap.add_argument("--smoke",action="store_true")
+ ap.add_argument("--source-manifest")
+ ap.add_argument("--source-wav")
+ ap.add_argument("--generation-dir")
+ ap.add_argument("--output-dir",required=True)
+ a=ap.parse_args()
  if a.smoke:
-  if not a.source_manifest or not a.source_wav:ap.error("--smoke requires a real source manifest and WAV")
+  if not a.source_manifest or not a.source_wav:
+      ap.error("--smoke requires a real source manifest and WAV")
   smoke(a)
  else:
-  if not a.generation_dir:ap.error("full render requires --generation-dir")
+  if not a.generation_dir:
+      ap.error("full render requires --generation-dir")
   full_render(Path(a.generation_dir).resolve(),Path(a.output_dir).resolve())
-if __name__=="__main__":main()
+if __name__=="__main__":
+    main()

@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "status": "approved-script",
+  "episodeId": "letter-alif",
+  "title": "بِطَاقَةُ حَرْفِ الأَلِفِ",
+  "sourceBrief": "حلقة تعليمية قصيرة عن حرف الألف، يقدمها فستق وبندق للأطفال باللغة العربية المشكّلة.",
+  "ageProfile": "3-5",
+  "format": "short",
+  "genre": "educational",
+  "visualStyle": "original-svg-letter-card",
+  "characters": [
+    {
+      "id": "fustuq",
+      "name": "فستق",
+      "role": "قطٌّ مُعَلِّمٌ ونشيطٌ"
+    },
+    {
+      "id": "bondoq",
+      "name": "بندق",
+      "role": "فأرٌ مُتَفَاعِلٌ يَسْتَمِعُ بِفَمٍ مُغْلَقٍ"
+    }
+  ],
+  "scenes": [
+    {
+      "sceneLabel": "المقطع 1",
+      "durationSeconds": null,
+      "narrationText": "أَهْلًا يا أَصْدِقائِي! أَنا فُسْتُق.",
+      "visualCue": "فستق يحيّي الأطفال، وبندق يستمع بفم مغلق",
+      "speakerId": "fustuq"
+    },
+    {
+      "sceneLabel": "المقطع 2",
+      "durationSeconds": null,
+      "narrationText": "وَأَنا بُنْدُق. اليَوْمَ نَتَعَلَّمُ حَرْفَ الأَلِف.",
+      "visualCue": "بندق يقدّم موضوع الدرس ويشير إلى حرف الألف",
+      "speakerId": "bondoq"
+    },
+    {
+      "sceneLabel": "المقطع 3",
+      "durationSeconds": null,
+      "narrationText": "أَلِف... أَرْنَب! أَرْنَبٌ صَغِيرٌ يَقْفِزُ.",
+      "visualCue": "إبراز رسم الأرنب الأصلي وتمييز بطاقة الكلمة",
+      "speakerId": "fustuq"
+    },
+    {
+      "sceneLabel": "المقطع 4",
+      "durationSeconds": null,
+      "narrationText": "أَلِف... أَسَد! أَسَدٌ قَوِيٌّ يُزَمْجِرُ.",
+      "visualCue": "إبراز رسم الأسد الأصلي وتمييز بطاقة الكلمة",
+      "speakerId": "bondoq"
+    },
+    {
+      "sceneLabel": "المقطع 5",
+      "durationSeconds": null,
+      "narrationText": "أَلِف... أُذُن! نَسْمَعُ بِالأُذُنِ.",
+      "visualCue": "إبراز رسم الأذن الأصلي وتمييز بطاقة الكلمة",
+      "speakerId": "fustuq"
+    },
+    {
+      "sceneLabel": "المقطع 6",
+      "durationSeconds": null,
+      "narrationText": "أَلِف... إِبْرَة! نَخِيطُ بِها الثَّوْب.",
+      "visualCue": "إبراز رسم الإبرة الأصلي وتمييز بطاقة الكلمة",
+      "speakerId": "bondoq"
+    },
+    {
+      "sceneLabel": "المقطع 7",
+      "durationSeconds": null,
+      "narrationText": "رَدِّدُوا مَعَنا: أَلِف! أَرْنَب، أَسَد، أُذُن، إِبْرَة.",
+      "visualCue": "عرض البطاقات الأربع بالترتيب مع إعادة النطق",
+      "speakerId": "fustuq"
+    },
+    {
+      "sceneLabel": "المقطع 8",
+      "durationSeconds": null,
+      "narrationText": "أَحْسَنْتُمْ! إِلَى اللِّقاءِ يا أَصْدِقائِي.",
+      "visualCue": "ختام هادئ؛ بندق يتحدث وفستق يستمع",
+      "speakerId": "bondoq"
+    }
+  ],
+  "durationMeasurementStatus": "pending-real-audio-generation",
+  "chunks": [
+    {
+      "chunkId": "chunk-01",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "أَهْلًا يا أَصْدِقائِي! أَنا فُسْتُق.",
+      "reference": {
+        "persona": "pistachio",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/pistachio-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-02",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "وَأَنا بُنْدُق. اليَوْمَ نَتَعَلَّمُ حَرْفَ الأَلِف.",
+      "reference": {
+        "persona": "hazelnut",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/hazelnut-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-03",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "أَلِف... أَرْنَب! أَرْنَبٌ صَغِيرٌ يَقْفِزُ.",
+      "reference": {
+        "persona": "pistachio",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/pistachio-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-04",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "أَلِف... أَسَد! أَسَدٌ قَوِيٌّ يُزَمْجِرُ.",
+      "reference": {
+        "persona": "hazelnut",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/hazelnut-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-05",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "أَلِف... أُذُن! نَسْمَعُ بِالأُذُنِ.",
+      "reference": {
+        "persona": "pistachio",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/pistachio-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-06",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "أَلِف... إِبْرَة! نَخِيطُ بِها الثَّوْب.",
+      "reference": {
+        "persona": "hazelnut",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/hazelnut-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-07",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "رَدِّدُوا مَعَنا: أَلِف! أَرْنَب، أَسَد، أُذُن، إِبْرَة.",
+      "reference": {
+        "persona": "pistachio",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/pistachio-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    },
+    {
+      "chunkId": "chunk-08",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "أَحْسَنْتُمْ! إِلَى اللِّقاءِ يا أَصْدِقائِي.",
+      "reference": {
+        "persona": "hazelnut",
+        "method": "A",
+        "generatedAtRuntime": true,
+        "generatedFile": "references/hazelnut-reference.wav"
+      },
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1,
+        "nfeStep": 16
+      }
+    }
+  ]
+}

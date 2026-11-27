@@ -558,7 +558,7 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
             "aggregateWallRtf": round(total_wall / total_audio, 6),
             "aggregateCpuRtf": round(total_cpu / total_audio, 6),
         }
-                manifest["jobElapsedSeconds"] = round(time.perf_counter() - started, 6)
+        manifest["jobElapsedSeconds"] = round(time.perf_counter() - started, 6)
         manifest["status"] = "complete"
         manifest["completedAt"] = datetime.now(timezone.utc).isoformat()
         save_progress(root, manifest)
@@ -618,16 +618,18 @@ def main() -> int:
     chunks = script_data.get("chunks")
     if not isinstance(chunks, list) or len(chunks) != 8:
         raise RuntimeError("Episode manifest must contain exactly eight chunks")
-    ids = set()
+    ids: set[str] = set()
     expected_speakers = ["pistachio", "hazelnut"] * 4
     for index, item in enumerate(chunks):
         if not isinstance(item, dict) or item.get("speakerId") != expected_speakers[index]:
             raise RuntimeError(f"Unexpected speaker or order in chunk {index + 1}")
-        if not isinstance(item.get("chunkId"), str) or not item["chunkId"].strip() or item["chunkId"] in ids:
+        chunk_id = item.get("chunkId")
+        source_text = item.get("text")
+        if not isinstance(chunk_id, str) or not chunk_id.strip() or chunk_id in ids:
             raise RuntimeError(f"Invalid or duplicate chunkId in chunk {index + 1}")
-        if not isinstance(item.get("text"), str) or not item["text"].strip():
+        if not isinstance(source_text, str) or not source_text.strip():
             raise RuntimeError(f"Missing Arabic source text in chunk {index + 1}")
-        ids.add(item["chunkId"])
+        ids.add(chunk_id)
     CHUNKS = chunks
     EPISODE_ID = script_data["episodeId"]
     SCRIPT_MANIFEST_SHA256 = sha256_file(script_path)
