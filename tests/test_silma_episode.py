@@ -5,6 +5,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -202,7 +203,7 @@ class SilmaSeedTests(unittest.TestCase):
                 json.dumps(candidate_manifest, ensure_ascii=False),
                 encoding="utf-8",
             )
-            with unittest.mock.patch.object(
+            with mock.patch.object(
                 merge,
                 "make_episode_mix",
                 return_value={
