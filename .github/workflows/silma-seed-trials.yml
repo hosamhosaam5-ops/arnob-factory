@@ -1,0 +1,191 @@
+name: SILMA chunk 03 seed trials (temporary)
+on:
+  push:
+    branches:
+      - feat/letter-card-silma-20261127
+    paths:
+      - .github/workflows/silma-seed-trials.yml
+      - run-requests/silma-seed-trials.json
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: silma-seed-trials-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  seed-trials:
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    permissions:
+      actions: read
+      contents: read
+    env:
+      BASE_RUN_ID: "46068424765"
+      BASE_ARTIFACT_ID: "15231544848"
+      ARNOB_RUN_REQUEST_PATH: run-requests/silma-seed-trials.json
+    steps:
+      - name: Checkout exact temporary trigger commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Validate bounded seed request and exact source script
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          import json
+          import hashlib
+          from pathlib import Path
+
+          request = json.loads(Path("run-requests/silma-seed-trials.json").read_text(encoding="utf-8"))
+          assert request.get("schemaVersion") == 1
+          assert request.get("episodeId") == "letter-alif"
+          assert request.get("purpose") == "seed-trials"
+          assert request.get("chunkId") == "chunk-03"
+          assert request.get("baseRunId") == 46068424765
+          assert request.get("baseArtifactId") == 15231544848
+          seeds = request.get("seeds")
+          assert isinstance(seeds, list) and 1 <= len(seeds) <= 5
+          assert len(seeds) == len(set(seeds))
+          assert all(isinstance(seed, int) and 0 <= seed <= 2147483647 for seed in seeds)
+          print(f"SEED_REQUEST_VALID=PASS seeds={seeds}")
+
+          script = Path("assets/episodes/letter-alif.json")
+          data = json.loads(script.read_text(encoding="utf-8"))
+          chunks = [item for item in data["chunks"] if item["chunkId"] == "chunk-03"]
+          assert len(chunks) == 1
+          item = chunks[0]
+          assert item["speakerId"] == "pistachio"
+          assert item["text"] == "أَلِف... أَرْنَب! أَرْنَبٌ صَغِيرٌ يَقْفِزُ."
+          assert item["settings"]["voice"] == "ar+f3"
+          assert item["settings"]["method"] == "A"
+          assert item["settings"]["nfeStep"] == 16
+          print("SCRIPT_SHA256=" + hashlib.sha256(script.read_bytes()).hexdigest())
+          print("EXACT_CHUNK_03_TEXT_AND_VOICE=PASS")
+          PY
+          test -s assets/episodes/letter-alif.json
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          check-latest: true
+
+      - name: Install pinned CPU-only SILMA runtime and audio tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/install_cpu_stack.sh 2>&1 | tee silma-install.log
+          python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+          python -m py_compile scripts/silma_episode.py scripts/evaluate_silma_seed.py
+
+      - name: Download immutable Pipeline run 6 baseline artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/base-run artifacts/seed-trials
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BASE_RUN_ID/artifacts" > artifacts/base-run/artifact-list.json
+          jq -e --argjson id "$BASE_ARTIFACT_ID"             '[.artifacts[] | select(.id == $id and .expired == false)] | length == 1'             artifacts/base-run/artifact-list.json >/dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$BASE_ARTIFACT_ID/zip"             > artifacts/base-run/run-6.zip
+          unzip -q artifacts/base-run/run-6.zip -d artifacts/base-run/extracted
+          BASE_DIR="artifacts/base-run/extracted/artifacts/silma-letter-card"
+          test -s "$BASE_DIR/manifest.json"
+          test -s "$BASE_DIR/references/reference-manifest.json"
+          jq -e '(.status == "complete" and .dryRun == false and (.completedChunks | length) == 8)'             "$BASE_DIR/manifest.json" >/dev/null
+          test "$(jq -r '.runPolicy.runId' "$BASE_DIR/manifest.json")" = "$BASE_RUN_ID"
+          SCRIPT_SHA="$(sha256sum assets/episodes/letter-alif.json | cut -d ' ' -f 1)"
+          BASE_SCRIPT_SHA="$(jq -r '.episodeScriptSha256' "$BASE_DIR/manifest.json")"
+          test "$SCRIPT_SHA" = "$BASE_SCRIPT_SHA"
+          echo "BASE_ARTIFACT_DOWNLOAD=PASS artifact_id=$BASE_ARTIFACT_ID"
+          echo "BASE_SCRIPT_SHA_MATCH=PASS sha256=$SCRIPT_SHA"
+
+      - name: Recreate and verify the exact original Method A eSpeak references
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE_DIR="artifacts/base-run/extracted/artifacts/silma-letter-card"
+          mkdir -p artifacts/seed-trials/references
+          cp "$BASE_DIR/references/reference-manifest.json"             artifacts/seed-trials/base-reference-manifest.json
+          bash scripts/prepare_silma_method_a.sh artifacts/seed-trials/references             2>&1 | tee artifacts/seed-trials/reference-generation.log
+          for persona in pistachio hazelnut; do
+            expected="$(jq -r --arg persona "$persona" '.files[$persona].sha256'               artifacts/seed-trials/base-reference-manifest.json)"
+            actual="$(jq -r --arg persona "$persona" '.files[$persona].sha256'               artifacts/seed-trials/references/reference-manifest.json)"
+            test "$expected" = "$actual"
+            echo "REFERENCE_SHA_MATCH persona=$persona sha256=$actual"
+          done
+          jq -e '.personas.pistachio.voice == "ar+f3" and .personas.pistachio.speed == 160 and .personas.pistachio.pitch == 68'             artifacts/seed-trials/references/reference-manifest.json >/dev/null
+          echo "EXACT_METHOD_A_REFERENCE=PASS"
+
+      - name: Generate and measure up to five one-chunk seeds; stop at first pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/seed-trials/results
+          printf '{"chunkId":"chunk-03","status":"running","trials":[]}\n'             > artifacts/seed-trials/seed-trial-summary.json
+          mapfile -t seeds < <(jq -r '.seeds[]' "$ARNOB_RUN_REQUEST_PATH")
+          selected_seed=""
+          for seed in "${seeds[@]}"; do
+            output_dir="artifacts/seed-trials/seed-$seed"
+            mkdir -p "$output_dir/logs"
+            echo "SEED_TRIAL_START seed=$seed"
+            set +e
+            timeout --signal=TERM --kill-after=30s 3600s               python scripts/silma_episode.py                 --references-dir artifacts/seed-trials/references                 --output-dir "$output_dir"                 --episode-manifest assets/episodes/letter-alif.json                 --only-chunk-id chunk-03                 --seed "$seed"                 2>&1 | tee "$output_dir/logs/generation.log"
+            generation_status=${PIPESTATUS[0]}
+            set -e
+            if [ "$generation_status" -ne 0 ]; then
+              jq --argjson seed "$seed" --argjson code "$generation_status"                 '.status="generation-error" | .trials += [{"seed":$seed,"status":"generation-error","exitCode":$code}]'                 artifacts/seed-trials/seed-trial-summary.json                 > artifacts/seed-trials/summary.pending.json
+              mv artifacts/seed-trials/summary.pending.json                 artifacts/seed-trials/seed-trial-summary.json
+              echo "SEED_GENERATION_FAILED seed=$seed exit_code=$generation_status"
+              exit "$generation_status"
+            fi
+
+            set +e
+            python scripts/evaluate_silma_seed.py               --mp3 "$output_dir/chunks/03-pistachio.mp3"               --wav "$output_dir/chunks/03-pistachio.wav"               --manifest "$output_dir/manifest.json"               --chunk-id chunk-03               --expected-duration 2.54               --duration-tolerance 0.30               --maximum-internal-silence 0.45               > "artifacts/seed-trials/results/seed-$seed.json"
+            evaluation_status=$?
+            set -e
+            if [ "$evaluation_status" -gt 1 ]; then
+              echo "SEED_EVALUATION_ERROR seed=$seed exit_code=$evaluation_status"
+              exit "$evaluation_status"
+            fi
+            jq --slurpfile trial "artifacts/seed-trials/results/seed-$seed.json"               '.trials += $trial' artifacts/seed-trials/seed-trial-summary.json               > artifacts/seed-trials/summary.pending.json
+            mv artifacts/seed-trials/summary.pending.json               artifacts/seed-trials/seed-trial-summary.json
+
+            if jq -e '.pass == true' "artifacts/seed-trials/results/seed-$seed.json" >/dev/null; then
+              selected_seed="$seed"
+              echo "FIRST_PASSING_SEED=$selected_seed"
+              break
+            fi
+            echo "SEED_TRIAL_REJECTED seed=$seed reason=duration_or_internal_silence_or_signal_proxy"
+          done
+
+          if [ -n "$selected_seed" ]; then
+            jq --argjson seed "$selected_seed"               '.status="candidate-found" | .selectedSeed=$seed | .selectionRule="first seed with max internal silence <0.45s, duration 2.54s +/-0.30s, and signal integrity proxy pass"'               artifacts/seed-trials/seed-trial-summary.json               > artifacts/seed-trials/summary.pending.json
+            mv artifacts/seed-trials/summary.pending.json               artifacts/seed-trials/seed-trial-summary.json
+            printf '%s\n' "$selected_seed" > artifacts/seed-trials/selected-seed.txt
+          else
+            jq '.status="no-passing-seed" | .selectedSeed=null'               artifacts/seed-trials/seed-trial-summary.json               > artifacts/seed-trials/summary.pending.json
+            mv artifacts/seed-trials/summary.pending.json               artifacts/seed-trials/seed-trial-summary.json
+            echo "NO_SEED_PASSED_AFTER_ALL_REQUESTED_TRIALS"
+          fi
+
+      - name: Upload seed trials, exact-reference proof, audio and measurements
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: silma-chunk-03-seed-trials-${{ github.run_id }}
+          path: |
+            artifacts/seed-trials/**
+            artifacts/base-run/artifact-list.json
+            silma-install.log
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 7
