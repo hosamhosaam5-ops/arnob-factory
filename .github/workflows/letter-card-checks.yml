@@ -75,6 +75,11 @@ jobs:
             exit 1
           fi
 
+      - name: Install FFmpeg for audio trim integration tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+
       - name: Prepare Python and Arabic rendering test dependency
         run: |
           python3 -m venv .venv

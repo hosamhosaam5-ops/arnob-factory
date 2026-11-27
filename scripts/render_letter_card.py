@@ -16,6 +16,17 @@ import render_character_episode as engine
 
 W,H,FPS=1280,720,24
 PAUSE=0.20
+EDGE_SILENCE_MARGIN_SECONDS=0.08
+EDGE_SILENCE_WINDOW_SECONDS=0.02
+EDGE_SILENCE_FILTER_KEEP_SECONDS=EDGE_SILENCE_MARGIN_SECONDS+EDGE_SILENCE_WINDOW_SECONDS
+EDGE_SILENCE_FILTER=(
+ "silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:"
+ "start_silence="+str(EDGE_SILENCE_FILTER_KEEP_SECONDS)+":window=0.02,"
+ "areverse,"
+ "silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:"
+ "start_silence="+str(EDGE_SILENCE_FILTER_KEEP_SECONDS)+":window=0.02,"
+ "areverse"
+)
 WORDS=("أَرْنَبٌ","أَسَدٌ","أُذُنٌ","إِبْرَةٌ")
 EXAMPLE="حَرْفُ الْأَلِفِ: أَرْنَبٌ، أَسَدٌ، أُذُنٌ، إِبْرَةٌ."
 
@@ -37,6 +48,22 @@ def duration(p:Path)->float:
  if not math.isfinite(x) or x<=0:
      raise RuntimeError("Invalid media duration: "+p.name)
  return x
+
+def trim_silence_edges(source:Path,output:Path)->dict[str,float]:
+ output.parent.mkdir(parents=True,exist_ok=True)
+ source_duration=duration(source)
+ run(["ffmpeg","-hide_banner","-nostdin","-loglevel","error","-y",
+      "-i",str(source),"-af",EDGE_SILENCE_FILTER,
+      "-ar","24000","-ac","1","-c:a","pcm_s16le",str(output)],180)
+ trimmed_duration=duration(output)
+ if trimmed_duration<=0 or trimmed_duration>source_duration+0.02:
+  raise RuntimeError("Invalid edge-trimmed audio duration: "+output.name)
+ return {
+  "sourceDurationSeconds":round(source_duration,6),
+  "trimmedDurationSeconds":round(trimmed_duration,6),
+  "removedDurationSeconds":round(max(0.,source_duration-trimmed_duration),6),
+  "trimmedSha256":sha(output)
+ }
 
 def verify_smoke_source(manifest_path:Path,wav_path:Path)->dict[str,Any]:
  m=json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -173,14 +200,18 @@ def smoke(args:argparse.Namespace)->dict[str,Any]:
 def make_voice(root:Path,out:Path,chunks:list[dict[str,Any]])->tuple[Path,list[dict[str,Any]]]:
  pause=out/"pause-0.20s.wav"
  run(["ffmpeg","-hide_banner","-nostdin","-loglevel","error","-y","-f","lavfi","-i","anullsrc=r=24000:cl=mono","-t",str(PAUSE),"-ar","24000","-ac","1","-c:a","pcm_s16le",str(pause)])
+ trimmed_dir=out/"trimmed-chunks"
+ trimmed_dir.mkdir(parents=True,exist_ok=True)
  lines=[]
  details=[]
  for i,item in enumerate(chunks):
-  wav=root/item["wav"]["path"]
-  if sha(wav)!=item["wav"]["sha256"]:
-      raise RuntimeError("Input WAV SHA mismatch: "+wav.name)
-  lines.append("file '"+wav.resolve().as_posix().replace("'","'\\''")+"'")
-  details.append({"item":item,"wav":wav})
+  source_wav=root/item["wav"]["path"]
+  if sha(source_wav)!=item["wav"]["sha256"]:
+      raise RuntimeError("Input WAV SHA mismatch: "+source_wav.name)
+  trimmed_wav=trimmed_dir/("%02d-%s.wav"%(i+1,item["speakerId"]))
+  trim=trim_silence_edges(source_wav,trimmed_wav)
+  lines.append("file '"+trimmed_wav.resolve().as_posix().replace("'","'\\''")+"'")
+  details.append({"item":item,"wav":trimmed_wav,"sourceWav":source_wav,"trim":trim})
   if i<len(chunks)-1:
       lines.append("file '"+pause.resolve().as_posix()+"'")
  listing=out/"voice-concat.txt"
@@ -211,8 +242,8 @@ def full_render(root:Path,out:Path)->dict[str,Any]:
  for i,d in enumerate(details):
   vals,_=engine.rms_envelope(d["wav"])
   envelopes.append(vals)
-  dur=float(d["item"]["wav"]["durationSeconds"])
-  timeline.append({"speaker":d["item"]["speakerId"],"text":d["item"]["text"],"start":cursor,"duration":dur})
+  dur=float(d["trim"]["trimmedDurationSeconds"])
+  timeline.append({"chunkId":d["item"]["chunkId"],"speaker":d["item"]["speakerId"],"text":d["item"]["text"],"start":cursor,"duration":dur})
   cursor+=dur+(PAUSE if i<7 else 0)
  total=math.ceil(cursor*FPS)
  frames=out/"frames"
@@ -249,12 +280,14 @@ def full_render(root:Path,out:Path)->dict[str,Any]:
  if abs(duration(raw)-duration(voice))>.08:
      raise RuntimeError("Audio/video durations differ")
  for d in details:
-  if sha(d["wav"])!=d["item"]["wav"]["sha256"]:
+  if sha(d["sourceWav"])!=d["item"]["wav"]["sha256"]:
       raise RuntimeError("Source WAV modified during render")
  report={"status":"rendered-awaiting-qa","episodeId":"letter-alif","sourceManifestSha256":sha(manifest_path),
   "episodeScriptSha256":m.get("episodeScriptSha256"),"sourceWavCount":8,
   "sourceWavSha256":[x["item"]["wav"]["sha256"] for x in details],
   "sourceMp3Sha256":[x["item"]["mp3"]["sha256"] for x in details],
+  "trimmedChunks":[{"chunkId":x["item"]["chunkId"],**x["trim"]} for x in details],
+  "audioTimeline":[{"chunkId":x["chunkId"],"speaker":x["speaker"],"startSeconds":round(x["start"],6),"durationSeconds":round(x["duration"],6)} for x in timeline],
   "resolution":{"width":W,"height":H},"fps":FPS,"frames":total,"durationSeconds":round(duration(raw),6),
   "rawVideo":{"path":raw.name,"sha256":sha(raw),"sizeBytes":raw.stat().st_size},
   "voiceTrack":{"path":voice.name,"sha256":sha(voice),"sizeBytes":voice.stat().st_size},
