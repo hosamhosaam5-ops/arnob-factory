@@ -159,12 +159,14 @@ jobs:
             build/letter-card/audio-video-qa-report.json >/dev/null
 
       - name: Upload video, eight MP3 chunks, three frames, hashes and QA reports
-        if: success()
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: letter-card-alif-${{ github.run_id }}
           path: |
             build/letter-card/letter-card-episode.mp4
+            build/letter-card/letter-card-video-raw.mp4
+            build/letter-card/episode-audio-mix.wav
             build/letter-card/preview/letter-card.png
             build/letter-card/preview/word-rabbit.png
             build/letter-card/preview/final-scene.png
@@ -179,6 +181,6 @@ jobs:
             artifacts/silma-letter-card/references/reference-manifest.json
             artifacts/silma-letter-card/logs/*.log
             build/letter-card-smoke/smoke-report.json
-          if-no-files-found: error
+          if-no-files-found: warn
           compression-level: 0
           retention-days: 7
