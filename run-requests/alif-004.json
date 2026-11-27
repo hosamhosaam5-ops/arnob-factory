@@ -1,7 +1,0 @@
-{
-  "episodeId": "letter-alif",
-  "confirm_new_episode_run": true,
-  "runNumber": 5,
-  "expectedBranch": "feat/letter-card-silma-20261127",
-  "note": "Owner-authorized single CPU SILMA and render attempt; run_attempt=1; no retry."
-}

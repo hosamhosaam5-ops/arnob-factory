@@ -1,9 +1,6 @@
 name: letter-card SILMA and render pipeline
 
 on:
-  push:
-    branches: [feat/letter-card-silma-20261127]
-    paths: [run-requests/alif-004.json]
   workflow_dispatch:
     inputs:
       confirm_new_episode_run:
@@ -22,7 +19,7 @@ concurrency:
 
 jobs:
   pipeline:
-    if: ${{ ((github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true) || github.event_name == 'push') && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -35,11 +32,7 @@ jobs:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Validate owner-approved push run request
-        if: ${{ github.event_name == 'push' }}
-        run: jq -e '.episodeId == "letter-alif" and .confirm_new_episode_run == true' run-requests/alif-004.json
-
-      - name: Enforce at most five unique runs and one run per commit
+      - name: Enforce at most three unique runs and one run per commit
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -50,10 +43,10 @@ jobs:
           runs="$(gh api "repos/$REPOSITORY/actions/workflows/letter-card-pipeline.yml/runs?per_page=100")"
           printf '%s' "$runs" | jq -e --arg sha "$EXPECTED_SHA" '
             [.workflow_runs[]
-             | select((.event == "workflow_dispatch" or .event == "push")
+             | select(.event == "workflow_dispatch"
                       and .head_branch == "feat/letter-card-silma-20261127"
                       and .run_attempt == 1)] as $selected
-            | ($selected | length) <= 5
+            | ($selected | length) <= 3
               and ([$selected[] | select(.head_sha == $sha)] | length) == 1
           ' >/dev/null
           echo "RUN_LIMIT_AND_COMMIT_GUARD=PASS"
