@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   pipeline:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && githubtrue }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
@@ -89,7 +89,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0
-          python3 -c "from PIL import features; assert features.check('raqm'), 'Arabic RAQM is required'"
+          python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+          python -c "from PIL import features; assert features.check('raqm'), 'Arabic RAQM is required'"
           rsvg-convert --version
 
       - name: Run real-input template smoke before SILMA
@@ -120,8 +121,6 @@ jobs:
           HF_HUB_DISABLE_TELEMETRY: "1"
           HF_HUB_DOWNLOAD_TIMEOUT: "600"
           PYTHONUNBUFFERED: "1"
-          GITHUB_EVENT_NAME: "push"
-          GITHUB_RUN_ATTEMPT: "1"
         run: |
           set -euo pipefail
           timeout --signal=TERM --kill-after=30s 3600s \
