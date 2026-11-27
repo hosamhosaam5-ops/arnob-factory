@@ -1,0 +1,242 @@
+name: character episode v2 CPU render
+
+on:
+  push:
+    branches:
+      - feat/characters-v1-20261127
+    paths:
+      - '.ops/triggers/character-episode-v2-render.enable'
+      - '.github/workflows/character-episode-v2-render.yml'
+      - '.github/workflows/character-unit-checks.yml'
+      - 'assets/audio/**'
+      - 'assets/characters/**'
+      - 'scripts/render_character_episode.py'
+      - 'scripts/character_episode_qa.mjs'
+      - 'src/production/audio-mixer.js'
+      - 'src/production/video-qa.js'
+      - 'tests/**'
+      - 'docs/CHARACTER_VISUAL_REVIEW.md'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: character-episode-v2-render-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unit-checks:
+    uses: ./.github/workflows/character-unit-checks.yml
+
+  pr-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Verify activation marker and current open PR #1 head
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_OWNER: ${{ github.repository_owner }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          marker_json="$(gh api "repos/${GH_REPO}/contents/.ops/triggers/character-episode-v2-render.enable?ref=${EXPECTED_SHA}")"
+          marker_content="$(printf '%s' "$marker_json" | jq -r '.content' | tr -d '\n' | base64 --decode)"
+          test "$marker_content" = "activate-v2-render-after-green-unit-checks=true"
+          pull_requests="$(gh api "repos/${GH_REPO}/pulls?state=open&head=${GH_OWNER}:feat/characters-v1-20261127")"
+          printf '%s' "$pull_requests" | jq -e --arg sha "$EXPECTED_SHA" \
+            'any(.[]; .number == 1 and .draft == true and .head.sha == $sha)' >/dev/null
+          echo "Activation marker verified; PR #1 is open and its head matches $EXPECTED_SHA."
+
+  render:
+    needs: [unit-checks, pr-gate]
+    if: >-
+      needs.unit-checks.result == 'success' &&
+      needs.pr-gate.result == 'success' &&
+      github.ref == 'refs/heads/feat/characters-v1-20261127' &&
+      github.run_attempt == 1 &&
+      github.run_number <= 4
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact validated commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install CPU rendering and Arabic text dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0 jq
+          python3 -c "from PIL import features; assert features.check('raqm'), 'Pillow RAQM is required'"
+          ffmpeg -version | head -n 1
+          rsvg-convert --version
+
+      - name: Verify exactly the approved audio inputs
+        run: |
+          test -f assets/audio/manifest.json
+          test "$(find assets/audio/chunks -maxdepth 1 -type f -name '*.wav' | wc -l)" -eq 8
+          test "$(find assets/audio/chunks -maxdepth 1 -type f | wc -l)" -eq 8
+          python3 - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          root = Path('assets/audio')
+          manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
+          assert manifest['episodeId'] == 'episode-pilot-1'
+          assert manifest['status'] == 'complete' and manifest['dryRun'] is False
+          assert len(manifest['completedChunks']) == 8
+          for item in manifest['completedChunks']:
+              p = root / item['wav']['path']
+              assert p.is_file() and p.stat().st_size == item['wav']['sizeBytes']
+              assert hashlib.sha256(p.read_bytes()).hexdigest() == item['wav']['sha256']
+          PY
+
+      - name: Smoke the first three seconds through render, audio mix and video QA (max 120s)
+        id: smoke
+        run: |
+          timeout 120s bash -euo pipefail <<'SMOKE'
+          started="$(date +%s)"
+          out="build/characters-v2-smoke"
+          python3 -m py_compile scripts/render_character_episode.py
+          python3 scripts/render_character_episode.py \
+            --input-dir assets/audio \
+            --output-dir "$out" \
+            --smoke-seconds 3
+          test -s "$out/characters-video-raw.mp4"
+          test -s "$out/episode-audio-trimmed.wav"
+          raw_duration="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$out/characters-video-raw.mp4")"
+          python3 -c 'import sys; d=float(sys.argv[1]); assert 2.95 <= d <= 3.05, d' "$raw_duration"
+
+          node scripts/character_episode_qa.mjs "$out" audio-mix
+          test -s "$out/character-episode-v2.mp4"
+          final_duration="$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$out/character-episode-v2.mp4")"
+          python3 -c 'import sys; d=float(sys.argv[1]); assert 2.95 <= d <= 3.05, d' "$final_duration"
+
+          node scripts/character_episode_qa.mjs "$out" video-qa
+          jq -e '.status == "pass" and .audioMix.status == "pass" and .videoQa.status == "pass" and .sourceWavsUnmodified == true' \
+            "$out/audio-video-qa-report.json" >/dev/null
+          test -s "$out/preview-scenes/scene-01.png"
+          elapsed="$(( $(date +%s) - started ))"
+          echo "smoke pipeline elapsed: ${elapsed}s"
+          test "$elapsed" -le 120
+          SMOKE
+
+      - name: Upload miniature smoke video and proof
+        if: steps.smoke.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-smoke-${{ github.run_id }}
+          path: |
+            build/characters-v2-smoke/character-episode-v2.mp4
+            build/characters-v2-smoke/preview-scenes/scene-01.png
+            build/characters-v2-smoke/audio-mix-qa-report.json
+            build/characters-v2-smoke/video-qa-report.json
+            build/characters-v2-smoke/audio-video-qa-report.json
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Render full 24 fps 1280x720 episode on CPU
+        id: render-full
+        if: steps.smoke.outcome == 'success'
+        run: |
+          python3 scripts/render_character_episode.py \
+            --input-dir assets/audio \
+            --output-dir build/characters-v2
+          test -s build/characters-v2/characters-video-raw.mp4
+          test -s build/characters-v2/render-report.json
+          test -s build/characters-v2/frame-times.csv
+          test -s build/characters-v2/preview-scenes/scene-01.png
+          test -s build/characters-v2/preview-scenes/scene-03.png
+          test -s build/characters-v2/preview-scenes/scene-08.png
+          test -s build/characters-v2/before-after-comparison.png
+          raw_streams="$(ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame_rate -of json build/characters-v2/characters-video-raw.mp4)"
+          printf '%s' "$raw_streams" | jq -e 'any(.streams[]; .codec_type == "video" and .codec_name == "h264" and .width == 1280 and .height == 720 and .r_frame_rate == "24/1")' >/dev/null
+
+      - name: Run Audio Mix QA and create final MP4
+        id: audio-mix
+        if: steps.render-full.outcome == 'success'
+        run: node scripts/character_episode_qa.mjs build/characters-v2 audio-mix
+
+      - name: Verify final mixed MP4 exists and has both streams
+        id: final-file
+        if: steps.audio-mix.outcome == 'success'
+        run: |
+          test -s build/characters-v2/character-episode-v2.mp4
+          final_streams="$(ffprobe -v error -show_entries stream=codec_type,codec_name,width,height -of json build/characters-v2/character-episode-v2.mp4)"
+          printf '%s' "$final_streams" | jq -e 'any(.streams[]; .codec_type == "video" and .codec_name == "h264" and .width == 1280 and .height == 720)' >/dev/null
+          printf '%s' "$final_streams" | jq -e 'any(.streams[]; .codec_type == "audio" and .codec_name == "aac")' >/dev/null
+
+      - name: Run Video QA on final MP4
+        id: video-qa
+        if: steps.final-file.outcome == 'success'
+        run: node scripts/character_episode_qa.mjs build/characters-v2 video-qa
+
+      - name: Require both Audio and Video QA to pass
+        id: qa-gate
+        if: steps.video-qa.outcome == 'success'
+        run: |
+          jq -e '.status == "pass" and .audioMix.status == "pass" and .videoQa.status == "pass" and .sourceWavsUnmodified == true' \
+            build/characters-v2/audio-video-qa-report.json >/dev/null
+
+      - name: Upload v2 video
+        if: steps.qa-gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-video-${{ github.run_id }}
+          path: build/characters-v2/character-episode-v2.mp4
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scene 01 frame
+        if: steps.qa-gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-scene-01-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-01.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scene 03 digging and seed frame
+        if: steps.qa-gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-scene-03-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-03.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload scene 08 final frame
+        if: steps.qa-gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-scene-08-${{ github.run_id }}
+          path: build/characters-v2/preview-scenes/scene-08.png
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload before-after comparison page
+        if: steps.qa-gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-before-after-${{ github.run_id }}
+          path: |
+            build/characters-v2/before-after-comparison.png
+            build/characters-v2/before-after-comparison.svg
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload QA, hashes and render timing reports
+        if: steps.qa-gate.outcome == 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: character-episode-v2-reports-${{ github.run_id }}
+          path: |
+            build/characters-v2/audio-video-qa-report.json
+            build/characters-v2/audio-mix-qa-report.json
+            build/characters-v2/video-qa-report.json
+            build/characters-v2/render-report.json
+            build/characters-v2/frame-times.csv
+          if-no-files-found: error
+          retention-days: 7

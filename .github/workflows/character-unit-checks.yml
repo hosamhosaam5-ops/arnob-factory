@@ -1,0 +1,57 @@
+name: character unit checks
+
+on:
+  push:
+    branches:
+      - feat/characters-v1-20261127
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: character-unit-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unit-and-syntax:
+    if: >-
+      github.ref == 'refs/heads/feat/characters-v1-20261127' &&
+      github.run_attempt == 1 &&
+      github.run_number <= 10
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Install test-only Pillow dependency
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+
+      - name: Python compile and unit tests
+        run: |
+          .venv/bin/python -m compileall -q scripts tests
+          .venv/bin/python -m unittest discover -s tests -v
+
+      - name: Node syntax checks
+        run: |
+          node --check scripts/character_episode_qa.mjs
+          node --check src/production/audio-mixer.js
+          node --check src/production/video-qa.js
+
+      - name: Bash syntax checks
+        shell: bash
+        run: |
+          for file in scripts/*.sh; do
+            [ -f "$file" ] || continue
+            bash -n "$file"
+          done
+
+      - name: Workflow YAML syntax check
+        run: |
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }' \
+            .github/workflows/character-unit-checks.yml
