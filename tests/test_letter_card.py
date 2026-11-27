@@ -1,6 +1,9 @@
 import importlib.util
 import json
 import subprocess
+import tempfile
+import wave
+from unittest import mock
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -48,6 +51,93 @@ class LetterCardTests(unittest.TestCase):
         verified = card.verify_smoke_source(manifest_path, source)
         self.assertEqual(verified["sha256"], manifest["completedChunks"][0]["wav"]["sha256"])
         self.assertEqual(verified["chunkId"], manifest["completedChunks"][0]["chunkId"])
+
+    def test_full_render_consumes_actual_rms_envelope_list_shape(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "generation"
+            chunks_dir = root / "chunks"
+            output = Path(directory) / "render"
+            chunks_dir.mkdir(parents=True)
+            chunks = []
+            details = []
+            for index in range(8):
+                speaker = "pistachio" if index % 2 == 0 else "hazelnut"
+                wav_path = chunks_dir / f"{index + 1:02d}-{speaker}.wav"
+                with wave.open(str(wav_path), "wb") as wav_file:
+                    wav_file.setnchannels(1)
+                    wav_file.setsampwidth(2)
+                    wav_file.setframerate(24000)
+                    wav_file.writeframes(b"\x10\x00" * 6000)
+                item = {
+                    "chunkId": f"chunk-{index + 1:02d}",
+                    "speakerId": speaker,
+                    "text": "أَلِفٌ، اِخْتِبَارٌ.",
+                    "wav": {
+                        "path": f"chunks/{wav_path.name}",
+                        "durationSeconds": 0.25,
+                        "sha256": card.sha(wav_path),
+                    },
+                    "mp3": {"sha256": f"{index + 1:064x}"},
+                }
+                chunks.append(item)
+                details.append({"item": item, "wav": wav_path})
+
+            manifest = {
+                "status": "complete",
+                "dryRun": False,
+                "modelInferenceInvoked": True,
+                "episodeId": "letter-alif",
+                "method": "A",
+                "nfeStep": 16,
+                "completedChunks": chunks,
+                "episodeScriptSha256": "fixture-script-sha",
+            }
+            (root / "manifest.json").write_text(
+                json.dumps(manifest, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            voice_path = output / "episode-audio.wav"
+
+            def fake_make_voice(_root, out, _chunks):
+                voice = out / voice_path.name
+                voice.write_bytes(b"voice-fixture")
+                return voice, details
+
+            def fake_raster(_svg, path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"png-fixture")
+
+            def fake_run(command, timeout=180):
+                Path(command[-1]).write_bytes(b"mp4-fixture")
+
+            real_rms_envelope = card.engine.rms_envelope
+            observed_envelopes = []
+
+            def observe_rms_envelope(path):
+                result = real_rms_envelope(path)
+                observed_envelopes.append(result)
+                return result
+
+            with (
+                mock.patch.object(card, "make_voice", side_effect=fake_make_voice),
+                mock.patch.object(card, "raster", side_effect=fake_raster),
+                mock.patch.object(card, "draw_caption"),
+                mock.patch.object(card, "run", side_effect=fake_run),
+                mock.patch.object(card, "duration", return_value=1.0),
+                mock.patch.object(
+                    card.engine,
+                    "rms_envelope",
+                    side_effect=observe_rms_envelope,
+                ),
+            ):
+                report = card.full_render(root, output)
+
+            self.assertEqual(report["status"], "rendered-awaiting-qa")
+            self.assertEqual(len(observed_envelopes), 8)
+            self.assertTrue(all(isinstance(values, list) for values, _scale in observed_envelopes))
+            self.assertTrue(all(values for values, _scale in observed_envelopes))
+            self.assertTrue((output / "render-report.json").is_file())
 
     def test_video_qa_silence_limit_is_not_relaxed(self):
         check = subprocess.run(

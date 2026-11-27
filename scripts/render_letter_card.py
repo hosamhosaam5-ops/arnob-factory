@@ -225,7 +225,7 @@ def full_render(root:Path,out:Path)->dict[str,Any]:
   idx=max(i for i,x in enumerate(timeline) if x["start"]<=t)
   row=timeline[idx]
   local=t-row["start"]
-  level=0. if local>=row["duration"] else envelopes[idx]["values"][min(len(envelopes[idx]["values"])-1,max(0,int(local*FPS)))]
+  level=0. if local>=row["duration"] else envelopes[idx][min(len(envelopes[idx])-1,max(0,int(local*FPS)))]
   p=frames/("frame_%06d.png"%n)
   before=time.perf_counter()
   raster(card_svg(row["speaker"],t,level),p)
