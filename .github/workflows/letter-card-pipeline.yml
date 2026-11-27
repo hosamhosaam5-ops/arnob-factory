@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   pipeline:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && githubtrue }}
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
