@@ -270,7 +270,7 @@ def run_dry(root: Path, started: float) -> int:
         manifest["status"] = "complete"
         manifest["modelInferenceInvoked"] = False
         manifest["jobElapsedSeconds"] = round(time.perf_counter() - started, 6)
-                save_progress(root, manifest)
+        save_progress(root, manifest)
         print(json.dumps({
             "status": manifest["status"], "dryRun": True,
             "modelInferenceInvoked": False, "chunks": len(manifest["completedChunks"]),
