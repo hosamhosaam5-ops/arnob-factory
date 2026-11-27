@@ -80,11 +80,6 @@ jobs:
           python3 -m venv .venv
           .venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
 
-      - name: Python syntax and unit tests
-        run: |
-          .venv/bin/python -m compileall -q scripts tests
-          .venv/bin/python -m unittest discover -s tests -v
-
       - name: Node syntax
         run: |
           node --check scripts/letter_card_qa.mjs
@@ -105,3 +100,8 @@ jobs:
           ruby -e 'require "yaml"; ARGV.each { |path| YAML.parse_file(path) }' \
             .github/workflows/letter-card-checks.yml \
             .github/workflows/letter-card-pipeline.yml
+      - name: Python syntax and unit tests
+        run: |
+          .venv/bin/python -m compileall -q scripts tests
+          .venv/bin/python -m unittest discover -s tests -v
+

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import subprocess
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -49,9 +50,23 @@ class LetterCardTests(unittest.TestCase):
         self.assertEqual(verified["chunkId"], manifest["completedChunks"][0]["chunkId"])
 
     def test_video_qa_silence_limit_is_not_relaxed(self):
-        from src.production.video_qa import DEFAULT_LIMITS
-
-        self.assertEqual(DEFAULT_LIMITS.maxSilenceSegmentSeconds, 0.5)
+        check = subprocess.run(
+            [
+                "node",
+                "--input-type=module",
+                "--eval",
+                (
+                    "import { DEFAULT_LIMITS } from './src/production/video-qa.js'; "
+                    "if (DEFAULT_LIMITS.maxSilenceSegmentSeconds !== 0.5) "
+                    "throw new Error('maxSilenceSegmentSeconds must remain 0.5');"
+                ),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(check.returncode, 0, check.stderr)
 
 
 if __name__ == "__main__":
