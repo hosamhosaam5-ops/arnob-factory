@@ -1,4 +1,8 @@
 import importlib.util
+import math
+import re
+import shutil
+import struct
 import json
 import subprocess
 import tempfile
@@ -80,7 +84,17 @@ class LetterCardTests(unittest.TestCase):
                     "mp3": {"sha256": f"{index + 1:064x}"},
                 }
                 chunks.append(item)
-                details.append({"item": item, "wav": wav_path})
+                details.append({
+                    "item": item,
+                    "wav": wav_path,
+                    "sourceWav": wav_path,
+                    "trim": {
+                        "sourceDurationSeconds": 0.25,
+                        "trimmedDurationSeconds": 0.20,
+                        "removedDurationSeconds": 0.05,
+                        "trimmedSha256": card.sha(wav_path),
+                    },
+                })
 
             manifest = {
                 "status": "complete",
@@ -135,9 +149,68 @@ class LetterCardTests(unittest.TestCase):
 
             self.assertEqual(report["status"], "rendered-awaiting-qa")
             self.assertEqual(len(observed_envelopes), 8)
+            self.assertEqual(report["trimmedChunks"][0]["trimmedDurationSeconds"], 0.20)
+            self.assertEqual(report["audioTimeline"][1]["startSeconds"], 0.40)
             self.assertTrue(all(isinstance(values, list) for values, _scale in observed_envelopes))
             self.assertTrue(all(values for values, _scale in observed_envelopes))
             self.assertTrue((output / "render-report.json").is_file())
+
+    def test_edge_trim_preserves_80ms_margins_and_inner_silence(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg is required for the real filter test")
+        sample_rate = 24000
+
+        def silence(seconds):
+            return [0] * round(sample_rate * seconds)
+
+        def tone(seconds, frequency):
+            return [
+                int(8000 * math.sin(2 * math.pi * frequency * index / sample_rate))
+                for index in range(round(sample_rate * seconds))
+            ]
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "edge-and-inner-silence.wav"
+            trimmed = Path(directory) / "trimmed.wav"
+            samples = (
+                silence(0.45)
+                + tone(0.40, 440)
+                + silence(0.30)
+                + tone(0.40, 660)
+                + silence(0.45)
+            )
+            with wave.open(str(source), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(sample_rate)
+                wav_file.writeframes(b"".join(struct.pack("<h", value) for value in samples))
+
+            trim = card.trim_silence_edges(source, trimmed)
+            detected = subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-nostats", "-i", str(trimmed),
+                    "-af", "silencedetect=noise=-50dB:d=0.02",
+                    "-f", "null", "-",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(detected.returncode, 0, detected.stderr)
+            silence_durations = [
+                float(value)
+                for value in re.findall(
+                    r"silence_duration:\s*([0-9]+(?:\.[0-9]+)?)",
+                    detected.stderr,
+                )
+            ]
+            self.assertEqual(len(silence_durations), 3, detected.stderr)
+            self.assertGreaterEqual(silence_durations[0], 0.07)
+            self.assertLessEqual(silence_durations[0], 0.09)
+            self.assertGreaterEqual(silence_durations[1], 0.27)
+            self.assertLessEqual(silence_durations[1], 0.33)
+            self.assertGreaterEqual(silence_durations[2], 0.07)
+            self.assertLessEqual(silence_durations[2], 0.09)
+            self.assertAlmostEqual(trim["trimmedDurationSeconds"], 1.26, delta=0.04)
 
     def test_video_qa_silence_limit_is_not_relaxed(self):
         check = subprocess.run(
