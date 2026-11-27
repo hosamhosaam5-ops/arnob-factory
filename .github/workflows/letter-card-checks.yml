@@ -24,6 +24,60 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Syntax scan — Ruff and every Python source file
+        shell: bash
+        run: |
+          set -uo pipefail
+          python3 -m venv .venv-syntax
+          .venv-syntax/bin/python -m pip install --disable-pip-version-check --no-input "ruff==0.14.10"
+          .venv-syntax/bin/ruff --version
+          set +e
+          .venv-syntax/bin/ruff check --no-cache --output-format=concise . 2>&1 | tee ruff-scan.log
+          ruff_status=\${PIPESTATUS[0]}
+          set -e
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          log = Path("ruff-scan.log").read_text(encoding="utf-8", errors="replace").splitlines()
+          pattern = re.compile(r"^(.+\.py):(\d+):(\d+):\s+(\S+)\s+(.*)$")
+          for diagnostic in log:
+              match = pattern.match(diagnostic)
+              if not match:
+                  continue
+              file_name, line_text, col_text, code, message = match.groups()
+              path = Path(file_name)
+              try:
+                  lines = path.read_text(encoding="utf-8").splitlines()
+              except (OSError, UnicodeError):
+                  continue
+              line_no = int(line_text)
+              print(f"SYNTAX_CONTEXT {file_name}:{line_no}:{col_text} {code} {message}")
+              for number in range(max(1, line_no - 3), min(len(lines), line_no + 3) + 1):
+                  value = lines[number - 1]
+                  prefix = value[:len(value) - len(value.lstrip(" \t"))]
+                  spaces = prefix.count(" ")
+                  tabs = prefix.count("\t")
+                  print(f"  {number:04d} indent_spaces={spaces} indent_tabs={tabs} | {value}")
+          PY
+          compile_status=0
+          mapfile -d '' python_files < <(find . -type f -name '*.py' \
+            -not -path './.git/*' -not -path './.venv*/*' -print0 | sort -z)
+          for file in "\${python_files[@]}"; do
+            echo "PY_COMPILE file=$file"
+            if python3 -m py_compile "$file" 2>&1; then
+              echo "PY_COMPILE_RESULT=PASS file=$file"
+            else
+              echo "PY_COMPILE_RESULT=FAIL file=$file"
+              compile_status=1
+            fi
+          done
+          echo "RUFF_EXIT_CODE=$ruff_status"
+          echo "PY_COMPILE_EXIT_CODE=$compile_status"
+          if [ "$ruff_status" -ne 0 ] || [ "$compile_status" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Prepare Python and Arabic rendering test dependency
         run: |
           python3 -m venv .venv
