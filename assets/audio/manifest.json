@@ -1,0 +1,543 @@
+{
+  "schemaVersion": 1,
+  "episodeId": "episode-pilot-1",
+  "status": "complete",
+  "dryRun": false,
+  "method": "A",
+  "nfeStep": 16,
+  "modelInferenceInvoked": true,
+  "createdAt": "2026-11-26T12:37:03.383453+00:00",
+  "runPolicy": {
+    "event": "push",
+    "branch": "refs/heads/exp/episode-pilot-1",
+    "attempt": 1,
+    "runId": "45821000995",
+    "automaticRetry": false,
+    "timeoutMinutes": 40
+  },
+  "scriptedWords": 105,
+  "targetWords": 100,
+  "chunksPlanned": 8,
+  "completedChunks": [
+    {
+      "chunkId": "chunk-01",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "صَبَاحُ الْخَيْرِ يَا بُنْدُقُ! وَجَدْتُ بَذْرَةً صَغِيرَةً قُرْبَ الشَّجَرَةِ الْكَبِيرَةِ. هَلْ نَزْرَعُهَا مَعًا الْيَوْمَ؟",
+      "wordCount": 14,
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "pistachio-reference.wav",
+        "sha256": "2b780259182792e7cbbdef1385179b0c6f1e7a81039cdb7838a00cc166d6b293",
+        "sizeBytes": 231352,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 336.011492,
+        "wallSeconds": 178.683225,
+        "audioDurationSeconds": 8.662167,
+        "rtf": 20.628005,
+        "cpuRtf": 38.790697,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.185012
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 8.662167,
+        "peakAmplitude": 0.84277344,
+        "rmsAmplitude": 0.11313976,
+        "sizeBytes": 415828,
+        "sha256": "da0029e9bb68725b844b8dafff70307e07ac50b68e32cb950549ead7c9dab3b2",
+        "path": "chunks/01-pistachio.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 8.662167,
+        "sizeBytes": 139820,
+        "sha256": "486a1669c8f23d1f2890a7bb7b835695e6e25ac1fa06b703e8b9d8875539282a",
+        "path": "chunks/01-pistachio.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-02",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "فِكْرَةٌ جَمِيلَةٌ يَا فُسْتُقُ! لِنَبْحَثْ عَنْ مَكَانٍ تَصِلُهُ أَشِعَّةُ الشَّمْسِ، وَتَكُونُ تُرْبَتُهُ نَاعِمَةً وَغَنِيَّةً.",
+      "wordCount": 14,
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "hazelnut-reference.wav",
+        "sha256": "d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+        "sizeBytes": 268820,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 395.972019,
+        "wallSeconds": 209.316062,
+        "audioDurationSeconds": 10.020542,
+        "rtf": 20.888697,
+        "cpuRtf": 39.516028,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.099721
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 10.020542,
+        "peakAmplitude": 0.77893066,
+        "rmsAmplitude": 0.09783521,
+        "sizeBytes": 481030,
+        "sha256": "36c299c43c11b22e24497000b7e994adba67c2ea63ee0997b087494bb0f8b67c",
+        "path": "chunks/02-hazelnut.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 10.020542,
+        "sizeBytes": 161708,
+        "sha256": "4eb0800f8f4737d389246fc2e2a7a326444883ecfe5052787a29257f090b51f8",
+        "path": "chunks/02-hazelnut.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-03",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "أَنَا بِجِيبُ الْمَاءَ، وَأَنْتَ احْفِرْ حُفْرَةً صَغِيرَةً بِهَذِهِ الْمِلْعَقَةِ. لَا نَحْتَاجُ إِلَى أَدَوَاتٍ كَثِيرَةٍ.",
+      "wordCount": 14,
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "pistachio-reference.wav",
+        "sha256": "2b780259182792e7cbbdef1385179b0c6f1e7a81039cdb7838a00cc166d6b293",
+        "sizeBytes": 231352,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 329.146427,
+        "wallSeconds": 174.174725,
+        "audioDurationSeconds": 8.812667,
+        "rtf": 19.764133,
+        "cpuRtf": 37.349241,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.079317
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 8.812667,
+        "peakAmplitude": 0.72390747,
+        "rmsAmplitude": 0.09456439,
+        "sizeBytes": 423052,
+        "sha256": "ec575a8cf0e5460790e8ac549e4b62b2576d8783ce4fb1a03e8cf6327f16ed28",
+        "path": "chunks/03-pistachio.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 8.812667,
+        "sizeBytes": 142508,
+        "sha256": "e6fffd67415621aafabf46bd656816dfc1f25681a79cd7fbfe6d5a37bd0a36bf",
+        "path": "chunks/03-pistachio.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-04",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "جَهَّزْتُ الْحُفْرَةَ! ضَعِ الْبَذْرَةَ فِي وَسَطِهَا بِرِفْقٍ، ثُمَّ غَطِّهَا بِطَبَقَةٍ خَفِيفَةٍ مِنَ التُّرَابِ.",
+      "wordCount": 13,
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "hazelnut-reference.wav",
+        "sha256": "d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+        "sizeBytes": 268820,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 285.445318,
+        "wallSeconds": 151.393415,
+        "audioDurationSeconds": 8.189,
+        "rtf": 18.487412,
+        "cpuRtf": 34.857164,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.130608
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 8.189,
+        "peakAmplitude": 0.83331299,
+        "rmsAmplitude": 0.09299273,
+        "sizeBytes": 393116,
+        "sha256": "558dff6234864ad86f1e45051ff39ed6b0f9b8b23d24f516bb0fcdc48a660ac7",
+        "path": "chunks/04-hazelnut.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 8.189,
+        "sizeBytes": 132524,
+        "sha256": "975026d7850162da84c3a27af25bb493230983468a3e6177434212748cd2d0ff",
+        "path": "chunks/04-hazelnut.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-05",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "سَقَيْتُهَا قَلِيلًا مِنَ الْمَاءِ. يَا تُرَى، هَلْ سَتُصْبِحُ شَجَرَةً كَبِيرَةً فِي يَوْمٍ وَاحِدٍ؟",
+      "wordCount": 13,
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "pistachio-reference.wav",
+        "sha256": "2b780259182792e7cbbdef1385179b0c6f1e7a81039cdb7838a00cc166d6b293",
+        "sizeBytes": 231352,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 221.662896,
+        "wallSeconds": 117.150723,
+        "audioDurationSeconds": 6.442042,
+        "rtf": 18.18534,
+        "cpuRtf": 34.408794,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.074688
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 6.442042,
+        "peakAmplitude": 0.79901123,
+        "rmsAmplitude": 0.0945052,
+        "sizeBytes": 309262,
+        "sha256": "37ca4b5039f0e346a55041c1a32c8c27a045f10609f4a1f10ece900558f5cbc2",
+        "path": "chunks/05-pistachio.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 6.442042,
+        "sizeBytes": 104492,
+        "sha256": "565bb27a772e02b3592e201e365488fbd8c13da6284b357bfc87421f501b7abc",
+        "path": "chunks/05-pistachio.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-06",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "لَيْسَ الْيَوْمَ يَا فُسْتُقُ؛ فَالنَّبَاتُ يَحْتَاجُ إِلَى وَقْتٍ وَصَبْرٍ. سَنَعُودُ كُلَّ صَبَاحٍ لِنَرْعَاهَا.",
+      "wordCount": 13,
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "hazelnut-reference.wav",
+        "sha256": "d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+        "sizeBytes": 268820,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 283.309435,
+        "wallSeconds": 150.627078,
+        "audioDurationSeconds": 7.872375,
+        "rtf": 19.133626,
+        "cpuRtf": 35.987797,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.080081
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 7.872375,
+        "peakAmplitude": 0.81210327,
+        "rmsAmplitude": 0.11576725,
+        "sizeBytes": 377918,
+        "sha256": "0c13655605380371e284b63f410c5658b8d94aca50aac77c1db8a4da4da5dd87",
+        "path": "chunks/06-hazelnut.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 7.873958,
+        "sizeBytes": 127532,
+        "sha256": "7c3004d9ab39cd4cb0c3f5dd6d37b81ad7948dd4c7e31ae82ff7618fdb9fbd24",
+        "path": "chunks/06-hazelnut.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-07",
+      "speakerId": "pistachio",
+      "speakerArabic": "فستق",
+      "text": "بُكْرَةَ نَجِي وَنَشُوفُ إِذَا طَلَعَتْ وَرَقَةٌ جَدِيدَةٌ! وَسَأُحْضِرُ الْمَاءَ كُلَّ يَوْمٍ.",
+      "wordCount": 11,
+      "settings": {
+        "method": "A",
+        "voice": "ar+f3",
+        "referenceSpeed": 160,
+        "referencePitch": 68,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "pistachio-reference.wav",
+        "sha256": "2b780259182792e7cbbdef1385179b0c6f1e7a81039cdb7838a00cc166d6b293",
+        "sizeBytes": 231352,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 212.109599,
+        "wallSeconds": 112.44195,
+        "audioDurationSeconds": 5.907375,
+        "rtf": 19.034165,
+        "cpuRtf": 35.905897,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.07179
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 5.907375,
+        "peakAmplitude": 0.99996948,
+        "rmsAmplitude": 0.11572358,
+        "sizeBytes": 283598,
+        "sha256": "f9b8fa5fc2f10127438347e2b9a98abf2203461d8ae1b0c549852b8b81653315",
+        "path": "chunks/07-pistachio.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 5.907375,
+        "sizeBytes": 96044,
+        "sha256": "41680eb96a825cda1895b7af75d5f88c7e10996d4cbd11f5af8cb161d78ee8c7",
+        "path": "chunks/07-pistachio.mp3"
+      },
+      "synthetic": false
+    },
+    {
+      "chunkId": "chunk-08",
+      "speakerId": "hazelnut",
+      "speakerArabic": "بندق",
+      "text": "وَأَنَا سَأَحْمِي الْبَذْرَةَ وَأُبْعِدُ عَنْهَا الْأَشْيَاءَ الَّتِي تُؤْذِيهَا. فَكُلُّ شَيْءٍ جَمِيلٍ يَكْبُرُ بِالْعِنَايَةِ.",
+      "wordCount": 13,
+      "settings": {
+        "method": "A",
+        "voice": "ar+m3",
+        "referenceSpeed": 140,
+        "referencePitch": 43,
+        "synthesisSpeed": 1.0,
+        "nfeStep": 16
+      },
+      "reference": {
+        "path": "hazelnut-reference.wav",
+        "sha256": "d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+        "sizeBytes": 268820,
+        "sampleRate": 24000,
+        "channels": 1
+      },
+      "timing": {
+        "cpuSeconds": 394.155405,
+        "wallSeconds": 208.301822,
+        "audioDurationSeconds": 9.667042,
+        "rtf": 21.547628,
+        "cpuRtf": 40.773114,
+        "nfeStep": 16,
+        "synthetic": false,
+        "encodeWallSeconds": 0.082887
+      },
+      "wav": {
+        "codec": "pcm_s16le",
+        "sampleRate": 24000,
+        "channels": 1,
+        "durationSeconds": 9.667042,
+        "peakAmplitude": 0.63623047,
+        "rmsAmplitude": 0.0877078,
+        "sizeBytes": 464062,
+        "sha256": "40143f10127e11dbbf302a8b148ecad7b513fd2a76e61d6f821b48e42873d5eb",
+        "path": "chunks/08-hazelnut.wav"
+      },
+      "mp3": {
+        "codec": "mp3",
+        "sampleRate": 24000,
+        "channels": 1,
+        "bitRate": 128000,
+        "durationSeconds": 9.667042,
+        "sizeBytes": 155948,
+        "sha256": "6dacafcaa0671d79dd406d46feaa5a4ef7da1a3a6a0922264c24cbb09346e948",
+        "path": "chunks/08-hazelnut.mp3"
+      },
+      "synthetic": false
+    }
+  ],
+  "weights": {
+    "silma": {
+      "repository": "silma-ai/silma-tts",
+      "file": "4029877998a85c7c29910cbb6397cbd1dcc29011551495284d775a506cefa7d2",
+      "sizeBytes": 2603209272,
+      "sha256": "f43256d0b78b8803c638aed0875da5a4b372b4a784690a0156e5baff14f7336c",
+      "expectedSha256": "f43256d0b78b8803c638aed0875da5a4b372b4a784690a0156e5baff14f7336c",
+      "verifiedBeforeInference": true
+    },
+    "vocos": {
+      "repository": "charactr/vocos-mel-24khz",
+      "file": "f2b45ec349db11285b5311d5a26b96ba8adb97f24eb87f68bd0995e82cac95ba",
+      "sizeBytes": 54365991,
+      "sha256": "97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a",
+      "expectedSha256": "97ec976ad1fd67a33ab2682d29c0ac7df85234fae875aefcc5fb215681a91b2a",
+      "verifiedBeforeInference": true
+    }
+  },
+  "references": {
+    "pistachio": {
+      "path": "pistachio-reference.wav",
+      "sha256": "2b780259182792e7cbbdef1385179b0c6f1e7a81039cdb7838a00cc166d6b293",
+      "sizeBytes": 231352,
+      "sampleRate": 24000,
+      "channels": 1
+    },
+    "hazelnut": {
+      "path": "hazelnut-reference.wav",
+      "sha256": "d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+      "sizeBytes": 268820,
+      "sampleRate": 24000,
+      "channels": 1
+    }
+  },
+  "runtime": {
+    "python": "3.12.16",
+    "silma-tts": "1.0.5",
+    "torch": "2.11.0+cpu",
+    "torchaudio": "2.11.0+cpu",
+    "numpy": "1.26.4",
+    "device": "cpu",
+    "cudaAvailable": false
+  },
+  "downloadWallSeconds": 15.717868,
+  "modelInitialization": {
+    "cpuSeconds": 2.97109,
+    "wallSeconds": 2.898753
+  },
+  "episode": {
+    "wav": {
+      "codec": "pcm_s16le",
+      "sampleRate": 24000,
+      "channels": 1,
+      "bitRate": 384000,
+      "durationSeconds": 65.573208,
+      "sizeBytes": 3147592,
+      "sha256": "335b8f51c10853a0b63b6ee19f004efd9b134f8bbbe48313421f50789952b4c7",
+      "path": "episode-pilot.wav"
+    },
+    "mp3": {
+      "codec": "mp3",
+      "sampleRate": 24000,
+      "channels": 1,
+      "bitRate": 128000,
+      "durationSeconds": 65.573208,
+      "sizeBytes": 1050668,
+      "sha256": "2bcb395089c670524c1ac8e4a78da3602e57ddb329bd9589404c57919792490f",
+      "path": "episode-pilot.mp3"
+    },
+    "encodeWallSeconds": 0.295186
+  },
+  "measurementSummary": {
+    "totalInferenceCpuSeconds": 2457.812591,
+    "totalInferenceWallSeconds": 1302.089,
+    "totalSpeechAudioSeconds": 65.57321,
+    "aggregateWallRtf": 19.857027,
+    "aggregateCpuRtf": 37.481962
+  },
+  "baselineComparison": {
+    "baselineEstimateMinutes": 13.32,
+    "actualInferenceWallMinutes": 21.701483,
+    "differenceMinutes": 8.381483,
+    "differencePercent": 62.924,
+    "actualGeneratedSpeechSeconds": 65.57321,
+    "note": "13.32 minutes was a linear estimate for 40 seconds of speech; actual inference wall time is the sum of eight measured SILMA calls."
+  },
+  "jobElapsedSeconds": 1331.303344,
+  "completedAt": "2026-11-26T12:59:14.686747+00:00"
+}
