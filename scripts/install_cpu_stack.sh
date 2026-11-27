@@ -22,7 +22,7 @@ python -m pip install --no-cache-dir \
   unidecode vocos "x_transformers>=1.31.14" \
   "nemo_text_processing==1.1.0" "onnxruntime==1.32.0"
 
-python -m pip install --no-cache-dir --no-deps -r scripts/requirements-silma-proof.txt
+python -m pip install --no-cache-dir --no-deps -r scripts/requirements-silma.txt
 python -m pip install --no-cache-dir --no-deps "catt_tashkeel==1.0.2"
 python -m pip uninstall --yes torchcodec onnxruntime-gpu
 
