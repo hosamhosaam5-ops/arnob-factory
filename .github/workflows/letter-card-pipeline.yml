@@ -1,0 +1,185 @@
+name: letter-card SILMA and render pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_new_episode_run:
+        description: "Owner-authorized one-shot CPU SILMA + render run; the same run is never retried."
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: letter-card-pipeline-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout exact commit without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Enforce at most three unique runs and one run per commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          runs="$(gh api "repos/$REPOSITORY/actions/workflows/letter-card-pipeline.yml/runs?per_page=100")"
+          printf '%s' "$runs" | jq -e --arg sha "$EXPECTED_SHA" '
+            [.workflow_runs[]
+             | select(.event == "workflow_dispatch"
+                      and .head_branch == "feat/letter-card-silma-20261127"
+                      and .run_attempt == 1)] as $selected
+            | ($selected | length) <= 3
+              and ([$selected[] | select(.head_sha == $sha)] | length) == 1
+          ' >/dev/null
+          echo "RUN_LIMIT_AND_COMMIT_GUARD=PASS"
+
+      - name: Confirm exact owner-approved script and source assets exist
+        run: |
+          test -s assets/episodes/letter-alif.json
+          test -s assets/audio/manifest.json
+          test -s assets/audio/chunks/01-pistachio.wav
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          script = json.loads(Path("assets/episodes/letter-alif.json").read_text(encoding="utf-8"))
+          assert script.get("schemaVersion") == 1
+          assert script.get("status") == "approved-script"
+          assert script.get("episodeId") == "letter-alif"
+          assert len(script.get("chunks", [])) == 8
+          print("EXACT_EIGHT_CHUNK_SCRIPT=PASS")
+          PY
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          check-latest: true
+
+      - name: Run unit tests before any synthesis
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+          .venv/bin/python -m compileall -q scripts tests
+          .venv/bin/python -m unittest discover -s tests -v
+          node --check scripts/letter_card_qa.mjs
+          node --check src/production/audio-mixer.js
+          node --check src/production/video-qa.js
+          for file in scripts/*.sh; do [ -f "$file" ] || continue; bash -n "$file"; done
+          echo "UNIT_CHECKS=PASS"
+
+      - name: Install no-SILMA smoke rendering tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0
+          python3 -c "from PIL import features; assert features.check('raqm'), 'Arabic RAQM is required'"
+          rsvg-convert --version
+
+      - name: Run real-input template smoke before SILMA
+        run: |
+          python3 -m py_compile scripts/render_letter_card.py
+          python3 scripts/render_letter_card.py \
+            --smoke \
+            --source-manifest assets/audio/manifest.json \
+            --source-wav assets/audio/chunks/01-pistachio.wav \
+            --output-dir build/letter-card-smoke
+          test -s build/letter-card-smoke/letter-card-smoke.mp4
+          jq -e '.status == "pass" and .sourceUnmodified == true' build/letter-card-smoke/smoke-report.json >/dev/null
+
+      - name: Initialize isolated generation output
+        run: mkdir -p artifacts/silma-letter-card/logs artifacts/silma-letter-card/references artifacts/silma-letter-card/chunks
+
+      - name: Install CPU-only SILMA runtime
+        run: bash scripts/install_cpu_stack.sh 2>&1 | tee artifacts/silma-letter-card/logs/install.log
+
+      - name: Generate fresh Method A eSpeak references and record new hashes
+        run: bash scripts/prepare_silma_method_a.sh artifacts/silma-letter-card/references 2>&1 | tee artifacts/silma-letter-card/logs/references.log
+
+      - name: Compile SILMA runner and validator
+        run: python -m py_compile scripts/silma_episode.py scripts/validate_silma_episode.py
+
+      - name: Execute one CPU SILMA generation with atomic per-chunk checkpoints
+        env:
+          HF_HUB_DISABLE_TELEMETRY: "1"
+          HF_HUB_DOWNLOAD_TIMEOUT: "600"
+          PYTHONUNBUFFERED: "1"
+          GITHUB_EVENT_NAME: "push"
+          GITHUB_RUN_ATTEMPT: "1"
+        run: |
+          set -euo pipefail
+          timeout --signal=TERM --kill-after=30s 3600s \
+            python scripts/silma_episode.py \
+              --references-dir artifacts/silma-letter-card/references \
+              --output-dir artifacts/silma-letter-card \
+              --episode-manifest assets/episodes/letter-alif.json \
+              2>&1 | tee artifacts/silma-letter-card/logs/generation.log
+
+      - name: Validate eight MP3/WAV chunks, reference hashes and both model weights
+        if: success()
+        run: |
+          python scripts/validate_silma_episode.py artifacts/silma-letter-card assets/episodes/letter-alif.json \
+            2>&1 | tee artifacts/silma-letter-card/logs/validation.log
+
+      - name: Render original SVG Alif episode on CPU
+        if: success()
+        run: |
+          python -m py_compile scripts/render_letter_card.py
+          python scripts/render_letter_card.py \
+            --generation-dir artifacts/silma-letter-card \
+            --output-dir build/letter-card \
+            2>&1 | tee artifacts/silma-letter-card/logs/render.log
+          test -s build/letter-card/letter-card-video-raw.mp4
+          test -s build/letter-card/render-report.json
+
+      - name: Run Audio Mix QA
+        if: success()
+        run: node scripts/letter_card_qa.mjs artifacts/silma-letter-card build/letter-card audio-mix
+
+      - name: Run Video QA with unchanged 0.5-second silence limit
+        if: success()
+        run: |
+          node scripts/letter_card_qa.mjs artifacts/silma-letter-card build/letter-card video-qa
+          jq -e '.status == "pass" and .protectedSilenceLimitSeconds == 0.5 and .sourceMediaUnmodified == true' \
+            build/letter-card/audio-video-qa-report.json >/dev/null
+
+      - name: Upload video, eight MP3 chunks, three frames, hashes and QA reports
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: letter-card-alif-${{ github.run_id }}
+          path: |
+            build/letter-card/letter-card-episode.mp4
+            build/letter-card/preview/letter-card.png
+            build/letter-card/preview/word-rabbit.png
+            build/letter-card/preview/final-scene.png
+            build/letter-card/render-report.json
+            build/letter-card/audio-mix-qa-report.json
+            build/letter-card/video-qa-report.json
+            build/letter-card/audio-video-qa-report.json
+            artifacts/silma-letter-card/chunks/*.mp3
+            artifacts/silma-letter-card/chunks/*.wav
+            artifacts/silma-letter-card/manifest.json
+            artifacts/silma-letter-card/weight-preflight.json
+            artifacts/silma-letter-card/references/reference-manifest.json
+            artifacts/silma-letter-card/logs/*.log
+            build/letter-card-smoke/smoke-report.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
