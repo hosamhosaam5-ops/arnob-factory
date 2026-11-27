@@ -341,18 +341,8 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
     save_progress(root, manifest)
 
     try:
-        event_name = os.environ.get("GITHUB_EVENT_NAME")
-        ref_name = os.environ.get("GITHUB_REF")
-        if not (
-            event_name == "workflow_dispatch"
-            or (
-                event_name == "push"
-                and ref_name == "refs/heads/feat/letter-card-silma-20261127"
-            )
-        ):
-            raise RuntimeError(
-                "Run guard rejected event: expected workflow_dispatch or push on the approved PR branch"
-            )
+        if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
+            raise RuntimeError("Run guard rejected event: expected workflow_dispatch")
         if os.environ.get("GITHUB_RUN_ATTEMPT") != "1":
             raise RuntimeError(f"Run guard rejected attempt: expected 1, received {os.environ.get('GITHUB_RUN_ATTEMPT')!r}")
 
