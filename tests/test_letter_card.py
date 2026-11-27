@@ -22,6 +22,14 @@ assert SPEC is not None and SPEC.loader is not None
 card = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(card)
 
+SILMA_SPEC = importlib.util.spec_from_file_location(
+    "silma_episode",
+    ROOT / "scripts" / "silma_episode.py",
+)
+assert SILMA_SPEC is not None and SILMA_SPEC.loader is not None
+silma_episode = importlib.util.module_from_spec(SILMA_SPEC)
+SILMA_SPEC.loader.exec_module(silma_episode)
+
 
 class LetterCardTests(unittest.TestCase):
     def test_svg_is_well_formed_and_has_alif_and_four_original_drawings(self):
