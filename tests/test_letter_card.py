@@ -1,4 +1,9 @@
 import importlib.util
+import contextlib
+import io
+import os
+import sys
+import types
 import json
 import subprocess
 import tempfile
@@ -16,6 +21,14 @@ SPEC = importlib.util.spec_from_file_location(
 assert SPEC is not None and SPEC.loader is not None
 card = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(card)
+
+SILMA_SPEC = importlib.util.spec_from_file_location(
+    "silma_episode",
+    ROOT / "scripts" / "silma_episode.py",
+)
+assert SILMA_SPEC is not None and SILMA_SPEC.loader is not None
+silma_episode = importlib.util.module_from_spec(SILMA_SPEC)
+SILMA_SPEC.loader.exec_module(silma_episode)
 
 
 class LetterCardTests(unittest.TestCase):
@@ -157,6 +170,93 @@ class LetterCardTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(check.returncode, 0, check.stderr)
+
+
+class SilmaEventGuardTests(unittest.TestCase):
+    def invoke_run_real(self, event_name, ref_name):
+        fake_numpy = types.SimpleNamespace(__version__="1.26.4")
+        fake_soundfile = types.SimpleNamespace()
+        fake_torch = types.SimpleNamespace(
+            __version__="2.11.0",
+            cuda=types.SimpleNamespace(is_available=lambda: False),
+            version=types.SimpleNamespace(cuda=None),
+            set_num_threads=lambda count: None,
+            set_num_interop_threads=lambda count: None,
+        )
+        fake_torchaudio = types.SimpleNamespace(__version__="2.11.0")
+        versions = {
+            "silma-tts": "1.0.5",
+            "torch": "2.11.0",
+            "torchaudio": "2.11.0",
+        }
+        error_output = io.StringIO()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "output"
+            refs = Path(directory) / "references"
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "GITHUB_EVENT_NAME": event_name,
+                        "GITHUB_REF": ref_name,
+                        "GITHUB_RUN_ATTEMPT": "1",
+                    },
+                ),
+                mock.patch.dict(
+                    sys.modules,
+                    {
+                        "numpy": fake_numpy,
+                        "soundfile": fake_soundfile,
+                        "torch": fake_torch,
+                        "torchaudio": fake_torchaudio,
+                    },
+                ),
+                mock.patch.object(
+                    silma_episode.importlib.metadata,
+                    "version",
+                    side_effect=versions.__getitem__,
+                ),
+                contextlib.redirect_stderr(error_output),
+            ):
+                result = silma_episode.run_real(
+                    root,
+                    refs,
+                    silma_episode.time.perf_counter(),
+                )
+            manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+            return result, error_output.getvalue(), manifest
+
+    def test_accepts_push_on_approved_pr_branch(self):
+        result, error, manifest = self.invoke_run_real(
+            "push",
+            "refs/heads/feat/letter-card-silma-20261127",
+        )
+        self.assertEqual(result, 1)
+        self.assertIn("Missing Method A reference manifest", error)
+        self.assertNotIn("Run guard rejected event", error)
+        self.assertEqual(manifest["runPolicy"]["event"], "push")
+        self.assertEqual(
+            manifest["runPolicy"]["branch"],
+            "refs/heads/feat/letter-card-silma-20261127",
+        )
+
+    def test_rejects_push_on_another_branch(self):
+        result, error, manifest = self.invoke_run_real(
+            "push",
+            "refs/heads/feat/not-the-approved-branch",
+        )
+        self.assertEqual(result, 1)
+        self.assertIn(
+            "Run guard rejected event: expected workflow_dispatch or push on the approved PR branch",
+            error,
+        )
+        self.assertEqual(manifest["runPolicy"]["event"], "push")
+        self.assertEqual(
+            manifest["runPolicy"]["branch"],
+            "refs/heads/feat/not-the-approved-branch",
+        )
+
+
 
 
 if __name__ == "__main__":
