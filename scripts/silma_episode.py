@@ -45,6 +45,83 @@ EPISODE_ID = "letter-alif"
 SCRIPT_MANIFEST_SHA256 = ""
 
 
+def select_chunks(
+    chunks: list[dict[str, str]],
+    chunk_id: str | None,
+) -> list[dict[str, str]]:
+    if chunk_id is None:
+        return list(chunks)
+    matches = [item for item in chunks if item.get("chunkId") == chunk_id]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one chunk with id {chunk_id!r}; found {len(matches)}"
+        )
+    return matches
+
+
+def resolve_seed(index: int, override: int | None) -> int:
+    if index < 1:
+        raise ValueError("Chunk index must be positive")
+    if override is not None:
+        if not 0 <= override <= 2**31 - 1:
+            raise ValueError("Seed must be between 0 and 2147483647")
+        return override
+    return 4242 + index
+
+
+def authorize_run_event(
+    event: str,
+    attempt: str,
+    selected_chunk_id: str | None,
+    seed_override: int | None,
+) -> dict[str, Any]:
+    if attempt != "1":
+        raise RuntimeError(
+            f"Run guard rejected attempt: expected 1, received {attempt!r}"
+        )
+    if event == "workflow_dispatch":
+        return {
+            "mode": "full-episode" if selected_chunk_id is None else "single-chunk",
+            "automaticRetry": False,
+        }
+    if event != "push" or selected_chunk_id is None or seed_override is None:
+        raise RuntimeError(
+            "Run guard rejected event: push is restricted to a seeded single-chunk request"
+        )
+    request_name = os.environ.get("ARNOB_RUN_REQUEST_PATH", "")
+    request_path = Path(request_name)
+    if not request_name or not request_path.is_file():
+        raise RuntimeError("Run guard rejected push event: missing run request file")
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    if request.get("schemaVersion") != 1 or request.get("episodeId") != EPISODE_ID:
+        raise RuntimeError(
+            "Run guard rejected push event: invalid request schema or episode"
+        )
+    if request.get("chunkId") != selected_chunk_id:
+        raise RuntimeError(
+            "Run guard rejected push event: chunk id does not match request"
+        )
+    allowed_seeds = request.get("seeds")
+    if not isinstance(allowed_seeds, list):
+        allowed_seeds = [request.get("seed")]
+    if seed_override not in allowed_seeds:
+        raise RuntimeError(
+            "Run guard rejected push event: seed is not authorized by request"
+        )
+    purpose = request.get("purpose")
+    if purpose not in {"seed-trials", "one-shot-replacement"}:
+        raise RuntimeError(
+            "Run guard rejected push event: unsupported request purpose"
+        )
+    return {
+        "mode": purpose,
+        "chunkId": selected_chunk_id,
+        "seed": seed_override,
+        "requestPath": request_name,
+        "automaticRetry": False,
+    }
+
+
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -313,7 +390,14 @@ def load_audio_via_soundfile(
     return torch.from_numpy(data), int(sample_rate)
 
 
-def run_real(root: Path, references_dir: Path, started: float) -> int:
+def run_real(
+    root: Path,
+    references_dir: Path,
+    started: float,
+    selected_chunk_id: str | None = None,
+    seed_override: int | None = None,
+) -> int:
+    active_chunks = select_chunks(CHUNKS, selected_chunk_id)
     manifest: dict[str, Any] = {
         "schemaVersion": 1,
         "episodeId": EPISODE_ID,
@@ -331,20 +415,25 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
             "automaticRetry": False,
             "timeoutMinutes": 60,
         },
-        "scriptedWords": sum(len(item["text"].split()) for item in CHUNKS),
+        "scriptedWords": sum(len(item["text"].split()) for item in active_chunks),
         "episodeScriptSha256": SCRIPT_MANIFEST_SHA256,
-        "targetWords": sum(len(item["text"].split()) for item in CHUNKS),
-        "chunksPlanned": len(CHUNKS),
+        "targetWords": sum(len(item["text"].split()) for item in active_chunks),
+        "chunksPlanned": len(active_chunks),
+        "totalChunksInScript": len(CHUNKS),
+        "selectedChunkId": selected_chunk_id,
+        "seedOverride": seed_override,
         "completedChunks": [],
         "weights": {},
     }
     save_progress(root, manifest)
 
     try:
-        if os.environ.get("GITHUB_EVENT_NAME") != "workflow_dispatch":
-            raise RuntimeError("Run guard rejected event: expected workflow_dispatch")
-        if os.environ.get("GITHUB_RUN_ATTEMPT") != "1":
-            raise RuntimeError(f"Run guard rejected attempt: expected 1, received {os.environ.get('GITHUB_RUN_ATTEMPT')!r}")
+        manifest["runPolicy"]["request"] = authorize_run_event(
+            os.environ.get("GITHUB_EVENT_NAME", ""),
+            os.environ.get("GITHUB_RUN_ATTEMPT", ""),
+            selected_chunk_id,
+            seed_override,
+        )
 
         import numpy as np
         import soundfile as sf
@@ -465,6 +554,8 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
         save_progress(root, manifest)
 
         for index, chunk in enumerate(CHUNKS, start=1):
+            if selected_chunk_id is not None and chunk["chunkId"] != selected_chunk_id:
+                continue
             speaker = chunk["speakerId"]
             voice = PERSONAS[speaker]
             reference_path = references_dir / voice["reference"]
@@ -480,12 +571,13 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
             wall_started = time.perf_counter()
             manifest["modelInferenceInvoked"] = True
             save_progress(root, manifest)
+            inference_seed = resolve_seed(index, seed_override)
             tts.infer(
                 ref_file=str(reference_path),
                 ref_text=ARABIC_REFERENCE_TEXT,
                 gen_text=chunk["text"],
                 file_wave=str(pending_wav),
-                seed=4242 + index,
+                seed=inference_seed,
                 speed=1.0,
                 nfe_step=NFE_STEP,
                 normalize_numbers=False,
@@ -525,7 +617,9 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
                 "settings": {
                     "method": "A", "voice": voice["voice"],
                     "referenceSpeed": voice["speed"], "referencePitch": voice["pitch"],
-                    "synthesisSpeed": 1.0, "nfeStep": NFE_STEP,
+                    "synthesisSpeed": 1.0,
+                    "nfeStep": NFE_STEP,
+                    "seed": inference_seed,
                 },
                 "reference": reference_details[speaker],
                 "timing": timing,
@@ -544,20 +638,39 @@ def run_real(root: Path, references_dir: Path, started: float) -> int:
                 "wavSha256": wav_meta["sha256"], "mp3Sha256": mp3_meta["sha256"],
             }, ensure_ascii=False), flush=True)
 
-        if len(manifest["completedChunks"]) != len(CHUNKS):
-            raise RuntimeError(f"Unexpected completed chunk count: {len(manifest['completedChunks'])}")
+        if len(manifest["completedChunks"]) != len(active_chunks):
+            raise RuntimeError(
+                "Unexpected completed chunk count: "
+                f"{len(manifest['completedChunks'])}/{len(active_chunks)}"
+            )
 
-        manifest["episode"] = make_episode_mix(root, manifest["completedChunks"])
-        total_cpu = sum(float(item["timing"]["cpuSeconds"]) for item in manifest["completedChunks"])
-        total_wall = sum(float(item["timing"]["wallSeconds"]) for item in manifest["completedChunks"])
-        total_audio = sum(float(item["timing"]["audioDurationSeconds"]) for item in manifest["completedChunks"])
-        manifest["measurementSummary"] = {
-            "totalInferenceCpuSeconds": round(total_cpu, 6),
-            "totalInferenceWallSeconds": round(total_wall, 6),
-            "totalSpeechAudioSeconds": round(total_audio, 6),
-            "aggregateWallRtf": round(total_wall / total_audio, 6),
-            "aggregateCpuRtf": round(total_cpu / total_audio, 6),
-        }
+        if selected_chunk_id is None:
+            manifest["episode"] = make_episode_mix(root, manifest["completedChunks"])
+            total_cpu = sum(
+                float(item["timing"]["cpuSeconds"])
+                for item in manifest["completedChunks"]
+            )
+            total_wall = sum(
+                float(item["timing"]["wallSeconds"])
+                for item in manifest["completedChunks"]
+            )
+            total_audio = sum(
+                float(item["timing"]["audioDurationSeconds"])
+                for item in manifest["completedChunks"]
+            )
+            manifest["measurementSummary"] = {
+                "totalInferenceCpuSeconds": round(total_cpu, 6),
+                "totalInferenceWallSeconds": round(total_wall, 6),
+                "totalSpeechAudioSeconds": round(total_audio, 6),
+                "aggregateWallRtf": round(total_wall / total_audio, 6),
+                "aggregateCpuRtf": round(total_cpu / total_audio, 6),
+            }
+        else:
+            manifest["partialGeneration"] = {
+                "chunkId": selected_chunk_id,
+                "seed": seed_override,
+                "fullEpisodeRebuildRequired": True,
+            }
         manifest["jobElapsedSeconds"] = round(time.perf_counter() - started, 6)
         manifest["status"] = "complete"
         manifest["completedAt"] = datetime.now(timezone.utc).isoformat()
@@ -605,7 +718,20 @@ def main() -> int:
     parser.add_argument("--output-dir", default="artifacts/silma-letter-card")
     parser.add_argument("--references-dir", default="artifacts/silma-letter-card/references")
     parser.add_argument("--dry-run", action="store_true", help="Synthetic media plumbing test; never downloads or invokes SILMA.")
-    parser.add_argument("--episode-manifest", required=True, help="Owner-approved eight-chunk JSON script manifest.")
+    parser.add_argument(
+        "--episode-manifest",
+        required=True,
+        help="Owner-approved eight-chunk JSON script manifest.",
+    )
+    parser.add_argument(
+        "--only-chunk-id",
+        help="Generate exactly one existing chunk without replacing the others.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        help="Explicit deterministic SILMA seed; requires --only-chunk-id.",
+    )
     args = parser.parse_args()
 
     global CHUNKS, EPISODE_ID, SCRIPT_MANIFEST_SHA256
@@ -630,6 +756,16 @@ def main() -> int:
         if not isinstance(source_text, str) or not source_text.strip():
             raise RuntimeError(f"Missing Arabic source text in chunk {index + 1}")
         ids.add(chunk_id)
+    if args.seed is not None and args.only_chunk_id is None:
+        raise RuntimeError("--seed requires --only-chunk-id")
+    if args.only_chunk_id is not None and args.seed is None:
+        raise RuntimeError("--only-chunk-id requires an explicit --seed")
+    if args.seed is not None and not 0 <= args.seed <= 2**31 - 1:
+        raise RuntimeError("--seed must be between 0 and 2147483647")
+    select_chunks(chunks, args.only_chunk_id)
+    if args.dry_run and args.only_chunk_id is not None:
+        raise RuntimeError("--dry-run cannot be combined with --only-chunk-id")
+
     CHUNKS = chunks
     EPISODE_ID = script_data["episodeId"]
     SCRIPT_MANIFEST_SHA256 = sha256_file(script_path)
@@ -643,7 +779,13 @@ def main() -> int:
     started = time.perf_counter()
     if args.dry_run:
         return run_dry(root, started)
-    return run_real(root, Path(args.references_dir).resolve(), started)
+    return run_real(
+        root,
+        Path(args.references_dir).resolve(),
+        started,
+        args.only_chunk_id,
+        args.seed,
+    )
 
 
 if __name__ == "__main__":
