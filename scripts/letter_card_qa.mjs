@@ -54,8 +54,7 @@ async function audioMix(){
  await requireFile(voiceTrack,'Rendered voice track');
  await run('ffmpeg',['-hide_banner','-nostdin','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t','1','-ar','48000','-ac','2','-c:a','pcm_s16le',silentBed]);
  const audioMix=await mixAudioForVideo({videoPath:rawVideo,voiceoverPath:voiceTrack,musicPath:silentBed,outputPath:mixedWav,soundEffects:[]});
- console.log('Audio Mix QA checks=' + JSON.stringify(audioMix.checks, null, 2));
- ensure(audioMix.status==='pass','Audio Mix QA failed: '+JSON.stringify(audioMix.checks.filter(c=>c.status!=='pass')));
+ ensure(audioMix.status==='pass','Audio Mix QA failed');
  await run('ffmpeg',['-hide_banner','-nostdin','-loglevel','error','-y','-i',rawVideo,'-i',mixedWav,
   '-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','128k','-ar','48000','-ac','2',
   '-shortest','-movflags','+faststart',finalVideo],300000);
