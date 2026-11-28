@@ -1,5 +1,6 @@
 import importlib.util
 import math
+import re
 import shutil
 import struct
 import subprocess
