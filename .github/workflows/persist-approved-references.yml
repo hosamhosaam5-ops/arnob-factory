@@ -19,7 +19,7 @@ jobs:
       - name: Checkout feature branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: \${{ github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - name: Download calibration artifact by exact ID
@@ -27,13 +27,13 @@ jobs:
         with:
           artifact-ids: 15253057317
           run-id: 46119257810
-          github-token: \${{ secrets.GITHUB_TOKEN }}
-          repository: \${{ github.repository }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
           path: calibration
 
       - name: Verify approved PCM and persist both references
         env:
-          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           SRC="calibration/artifacts/seed-trials/references"
