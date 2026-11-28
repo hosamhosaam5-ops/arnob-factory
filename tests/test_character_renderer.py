@@ -168,7 +168,7 @@ class CharacterAndStoryTests(unittest.TestCase):
             durations = [
                 float(value)
                 for value in re.findall(
-                    r"silence_duration:\\s*([0-9]+(?:\\.[0-9]+)?)",
+                    r"silence_duration:\s*([0-9]+(?:\.[0-9]+)?)",
                     detected.stderr,
                 )
             ]
