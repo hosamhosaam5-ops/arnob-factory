@@ -36,7 +36,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          SRC="calibration/artifacts/seed-trials/references"
+          SRC="calibration/silma-chunk-03-calibration-seed-trials-46119257810/artifacts/seed-trials/references"
           test -s "$SRC/pistachio-reference.wav"
           test -s "$SRC/hazelnut-reference.wav"
           python - <<'PY'
