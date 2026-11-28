@@ -98,6 +98,12 @@ jobs:
           echo "BASE_ARTIFACT=PASS artifact_id=$BASE_ARTIFACT_ID"
           echo "APPROVED_REFERENCE_FILE_SHA256=$REF_SHA"
 
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          check-latest: true
+
       - name: Install pinned CPU-only SILMA runtime and audio tools
         shell: bash
         run: |
