@@ -1,0 +1,206 @@
+name: SILMA chunk 03 replacement preflight
+on:
+  push:
+    branches:
+      - verify/silma-chunk03-preflight-20261128
+permissions:
+  actions: read
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout verification branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Set up Python 3.12
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: "3.12"
+      - name: Install local validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+          python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+      - name: Run repository unit and syntax checks
+        run: |
+          python -m compileall -q scripts tests
+          python -m unittest discover -s tests -v
+          node --check scripts/letter_card_qa.mjs
+          node --check src/production/audio-mixer.js
+          node --check src/production/video-qa.js
+          for file in scripts/*.sh; do [ -f "$file" ] || continue; bash -n "$file"; done
+          echo "PREFLIGHT_UNIT_CHECKS=PASS"
+      - name: Download exact run 6 and seed 4250 artifacts
+        env:
+          GH_TOKEN: \${{ github.token }}
+          REPOSITORY: \${{ github.repository }}
+        run: |
+          mkdir -p /tmp/run6 /tmp/calibration
+          gh run download 46068424765 --repo "$REPOSITORY" --name letter-card-alif-46068424765 --dir /tmp/run6
+          gh run download 46119257810 --repo "$REPOSITORY" --name silma-chunk-03-calibration-seed-trials-46119257810 --dir /tmp/calibration
+          test -s /tmp/run6/artifacts/silma-letter-card/manifest.json
+          test -s /tmp/calibration/artifacts/seed-trials/selected-candidate/manifest.json
+      - name: Verify supplied seed hashes and preserve baseline fingerprints
+        run: |
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          base=Path('/tmp/run6/artifacts/silma-letter-card')
+          candidate=Path('/tmp/calibration/artifacts/seed-trials/selected-candidate')
+          expected={'wav':'3649358adab289d936bfe09551624f646bc5b35b1f43eef0b44739da802ae3da',
+                    'mp3':'3a9459f3115007cdd0e6871b72367c45bb589e654ce293ae3d886bd2756502f8'}
+          def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+          m=json.loads((base/'manifest.json').read_text())
+          c=json.loads((candidate/'manifest.json').read_text())
+          new=c['completedChunks'][0]
+          assert new['chunkId']=='chunk-03' and new['settings']['seed']==4250
+          for k in ('wav','mp3'):
+              got=sha(candidate/new[k]['path'])
+              assert got==expected[k], f'{k} SHA mismatch: {got}'
+          preserved={}
+          for item in m['completedChunks']:
+              if item['chunkId']=='chunk-03': continue
+              for k in ('wav','mp3'):
+                  p=base/item[k]['path']
+                  assert sha(p)==item[k]['sha256']
+                  preserved[f"{item['chunkId']}:{k}"]=sha(p)
+          Path('preflight').mkdir(exist_ok=True)
+          Path('preflight/baseline-preserved-media.json').write_text(json.dumps(preserved,indent=2)+'\n')
+          Path('preflight/candidate-hash-check.json').write_text(json.dumps({
+            'status':'pass','seed':4250,'candidate':expected,'verifiedReference':new['reference']
+          },ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps({'candidateHashVerification':'PASS','seed':4250,'preservedMediaCount':len(preserved)},indent=2))
+          PY
+      - name: Apply official single-chunk replacement helper to isolated run 6 copy
+        run: |
+          mkdir -p preflight/base
+          cp -a /tmp/run6/artifacts/silma-letter-card/. preflight/base/
+          python scripts/replace_silma_chunk.py \
+            --base-dir preflight/base \
+            --candidate-dir /tmp/calibration/artifacts/seed-trials/selected-candidate \
+            --chunk-id chunk-03 \
+            --reference-approval-manifest assets/references/pistachio-method-a-approval.json \
+            | tee preflight/replacement-result.json
+          python - <<'PY'
+          import json,hashlib
+          from pathlib import Path
+          root=Path('preflight/base')
+          result=json.loads(Path('preflight/replacement-result.json').read_text())
+          m=json.loads((root/'manifest.json').read_text())
+          assert result['status']=='replaced' and result['seed']==4250
+          assert result['preservedChunkCount']==7 and result['preservedMediaCount']==14
+          assert len(m['completedChunks'])==8
+          assert m['replacementHistory'][-1]['chunkId']=='chunk-03'
+          assert m['replacementHistory'][-1]['seed']==4250
+          assert m['episode']['wav']['sha256'] and m['episode']['mp3']['sha256']
+          assert (root/'measurement-table.csv').is_file()
+          baseline=json.loads(Path('preflight/baseline-preserved-media.json').read_text())
+          after={}
+          for item in m['completedChunks']:
+              if item['chunkId']=='chunk-03': continue
+              for k in ('wav','mp3'):
+                  after[f"{item['chunkId']}:{k}"]=hashlib.sha256((root/item[k]['path']).read_bytes()).hexdigest()
+          assert after==baseline, 'One or more of the 14 unrelated media files changed'
+          assert result['preservedMediaSha256']==baseline
+          print(json.dumps({'replacement':'PASS','unrelatedMediaUnchanged':14,
+            'manifestUpdated':True,'replacementHistoryUpdated':True,
+            'measurementTableUpdated':True,'episodeWavSha256':m['episode']['wav']['sha256'],
+            'episodeMp3Sha256':m['episode']['mp3']['sha256']},indent=2))
+          PY
+      - name: Run -50dB silencedetect for all source and edge-trimmed MP3/WAV
+        run: |
+          python - <<'PY'
+          import json,re,subprocess
+          from pathlib import Path
+          root=Path('preflight/base')
+          manifest=json.loads((root/'manifest.json').read_text())
+          out=Path('preflight/silencedetect'); out.mkdir(parents=True,exist_ok=True)
+          trimmed=Path('preflight/edge-trimmed'); trimmed.mkdir(parents=True,exist_ok=True)
+          edge_filter=('silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:'
+            'start_silence=0.10:window=0.02,areverse,'
+            'silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:'
+            'start_silence=0.10:window=0.02,areverse')
+          def detect(path):
+              p=subprocess.run(['ffmpeg','-hide_banner','-nostdin','-i',str(path),
+                '-af','silencedetect=noise=-50dB:d=0.02','-f','null','-'],
+                text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+              if p.returncode: raise RuntimeError(f"silencedetect failed for {path}: {p.stderr[-2000:]}")
+              vals=[float(x) for x in re.findall(r'silence_duration:\s*([0-9.]+)',p.stderr)]
+              return max(vals,default=0.0)
+          rows=[]
+          for item in manifest['completedChunks']:
+              for media in ('wav','mp3'):
+                  src=root/item[media]['path']
+                  srcmax=detect(src)
+                  target=trimmed/(Path(src).stem+'.trimmed.'+media)
+                  args=['ffmpeg','-hide_banner','-nostdin','-loglevel','error','-y','-i',str(src),
+                        '-af',edge_filter,'-ar','24000','-ac','1']
+                  args += (['-c:a','pcm_s16le'] if media=='wav' else ['-codec:a','libmp3lame','-b:a','128k'])
+                  args += [str(target)]
+                  p=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                  if p.returncode: raise RuntimeError(f"edge trim failed for {src}: {p.stderr[-2000:]}")
+                  trimmedmax=detect(target)
+                  rows.append({'chunkId':item['chunkId'],'media':media,
+                    'sourceLongestSilenceSeconds':round(srcmax,6),
+                    'edgeTrimmedLongestSilenceSeconds':round(trimmedmax,6),
+                    'sourcePass':srcmax<0.5,'edgeTrimmedPass':trimmedmax<0.5,
+                    'sourceSha256':item[media]['sha256']})
+          failures=[r for r in rows if not r['sourcePass'] or not r['edgeTrimmedPass']]
+          result={'thresholdSeconds':0.5,'noiseThreshold':'-50dB','minimumSilenceDurationSeconds':0.02,
+                  'filesChecked':len(rows),'rows':rows,'status':'fail' if failures else 'pass','failures':failures}
+          (out/'silencedetect-report.json').write_text(json.dumps(result,indent=2)+'\n')
+          print(json.dumps(result,indent=2))
+          if failures: raise SystemExit(1)
+          timeline=[]; cursor=0.0
+          for item in manifest['completedChunks']:
+              p=trimmed/(Path(item['wav']['path']).stem+'.trimmed.wav')
+              d=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration',
+                '-of','default=noprint_wrappers=1:nokey=1',str(p)],text=True).strip())
+              timeline.append({'chunkId':item['chunkId'],'startSeconds':round(cursor,6),'durationSeconds':round(d,6)})
+              cursor+=d+0.20
+          if timeline: cursor-=0.20
+          (out/'trimmed-render-timeline.json').write_text(json.dumps({
+            'source':'edge-trimmed WAV duration measured with ffprobe','interChunkPauseSeconds':0.20,
+            'durationSeconds':round(cursor,6),'segments':timeline},indent=2)+'\n')
+          PY
+      - name: Informational Arabic ASR for replacement chunk
+        continue-on-error: true
+        run: |
+          python -m pip install --disable-pip-version-check --no-input faster-whisper
+          python - <<'PY'
+          import json,re,unicodedata
+          from pathlib import Path
+          from faster_whisper import WhisperModel
+          root=Path('preflight/base')
+          m=json.loads((root/'manifest.json').read_text())
+          item=next(x for x in m['completedChunks'] if x['chunkId']=='chunk-03')
+          model=WhisperModel('tiny',device='cpu',compute_type='int8')
+          segments,info=model.transcribe(str(root/item['wav']['path']),language='ar',beam_size=1)
+          recognized=' '.join(s.text.strip() for s in segments).strip()
+          expected=item['text']
+          def tokens(s):
+              s=unicodedata.normalize('NFKC',s)
+              s=re.sub(r'[\u064B-\u065F\u0670\u0640]','',s)
+              return re.findall(r'[\u0600-\u06FF]+',s)
+          exp=tokens(expected); rec=tokens(recognized)
+          norm=lambda x: re.sub(r'[^\u0600-\u06FF]','',x)
+          recset={norm(x) for x in rec}
+          missing=[x for x in exp if norm(x) not in recset]
+          report={'status':'completed','model':'tiny','language':info.language,
+            'expectedText':expected,'recognizedText':recognized,'expectedTokens':exp,
+            'recognizedTokens':rec,'missingWords':missing,'assessment':'informational only; not a QA gate'}
+          Path('preflight/asr-arabic.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
+          print(json.dumps(report,ensure_ascii=False,indent=2))
+          PY
+      - name: Upload complete preflight evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: silma-chunk03-replacement-preflight-\${{ github.run_id }}
+          path: preflight/
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 7
