@@ -1,5 +1,10 @@
 import importlib.util
+import math
+import shutil
+import struct
 import subprocess
+import tempfile
+import wave
 import xml.etree.ElementTree as ET
 import unittest
 from pathlib import Path
@@ -104,6 +109,70 @@ class CharacterAndStoryTests(unittest.TestCase):
         self.assertEqual(renderer.caption_baselines(1), [621.0])
         with self.assertRaises(ValueError):
             renderer.caption_baselines(4)
+
+
+    def test_character_render_trim_filter_is_edge_only(self):
+        self.assertNotIn("stop_periods=-1", renderer.TRIM_FILTER)
+        self.assertNotIn("stop_duration=", renderer.TRIM_FILTER)
+        self.assertEqual(renderer.TRIM_FILTER.count("start_periods=1"), 2)
+
+    def test_character_render_preserves_internal_silence(self):
+        self.assertIsNotNone(shutil.which("ffmpeg"), "ffmpeg is required for the real filter test")
+        sample_rate = 24000
+
+        def tone(seconds: float, frequency: float) -> bytes:
+            samples = [
+                int(9000 * math.sin(2 * math.pi * frequency * index / sample_rate))
+                for index in range(round(sample_rate * seconds))
+            ]
+            return b"".join(struct.pack("<h", value) for value in samples)
+
+        def silence(seconds: float) -> bytes:
+            return bytes(round(sample_rate * seconds) * 2)
+
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "source.wav"
+            trimmed = Path(directory) / "edge-only.wav"
+            with wave.open(str(source), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(sample_rate)
+                wav_file.writeframes(
+                    silence(0.40)
+                    + tone(0.40, 440)
+                    + silence(0.32)
+                    + tone(0.40, 660)
+                    + silence(0.40)
+                )
+            rendered = subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
+                    "-i", str(source), "-af", renderer.TRIM_FILTER,
+                    "-ar", str(sample_rate), "-ac", "1", "-c:a", "pcm_s16le", str(trimmed),
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(rendered.returncode, 0, rendered.stderr)
+            detected = subprocess.run(
+                [
+                    "ffmpeg", "-hide_banner", "-nostdin", "-nostats", "-i", str(trimmed),
+                    "-af", "silencedetect=noise=-50dB:d=0.02", "-f", "null", "-",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(detected.returncode, 0, detected.stderr)
+            durations = [
+                float(value)
+                for value in re.findall(
+                    r"silence_duration:\\s*([0-9]+(?:\\.[0-9]+)?)",
+                    detected.stderr,
+                )
+            ]
+            self.assertTrue(any(0.27 <= value <= 0.37 for value in durations), detected.stderr)
 
     def test_pause_reduced_without_changing_qa_limit(self):
         self.assertAlmostEqual(renderer.PAUSE_SECONDS, 0.20)
