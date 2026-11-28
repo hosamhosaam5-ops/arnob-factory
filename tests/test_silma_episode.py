@@ -127,6 +127,21 @@ class SilmaSeedTests(unittest.TestCase):
         self.assertEqual(len(intervals), 1)
         self.assertAlmostEqual(intervals[0]["durationSeconds"], 0.422)
 
+    def test_arabic_character_duration_window_contains_measured_chunk_three(self):
+        text = "أَلِف... أَرْنَب! أَرْنَبٌ صَغِيرٌ يَقْفِزُ."
+        minimum, maximum, mean = evaluator.duration_window(text, None, 0.30)
+        self.assertIsNone(mean)
+        self.assertLessEqual(minimum, 2.420917)
+        self.assertGreaterEqual(maximum, 2.420917)
+
+    def test_successful_same_text_durations_use_plus_minus_point_three_seconds(self):
+        minimum, maximum, mean = evaluator.duration_window(
+            "أَرْنَبٌ", [2.4, 2.6], 0.30
+        )
+        self.assertAlmostEqual(mean, 2.5)
+        self.assertAlmostEqual(minimum, 2.2)
+        self.assertAlmostEqual(maximum, 2.8)
+
     def test_single_chunk_merge_updates_only_target_and_preserves_other_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
