@@ -1,13 +1,9 @@
 name: letter-card SILMA and render pipeline
 
 on:
-  workflow_dispatch:
-    inputs:
-      confirm_new_episode_run:
-        description: "Owner-authorized one-shot CPU SILMA + render run; the same run is never retried."
-        required: true
-        type: boolean
-        default: false
+  push:
+    branches:
+      - feat/letter-card-silma-20261127
 
 permissions:
   actions: read
@@ -19,53 +15,58 @@ concurrency:
 
 jobs:
   pipeline:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.confirm_new_episode_run == true && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/feat/letter-card-silma-20261127' && github.run_attempt == 1 && github.run_number == 7 }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:
       actions: read
       contents: read
     steps:
-      - name: Checkout exact commit without persisted credentials
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - name: Checkout exact pushed commit without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
 
-      - name: Enforce at most three unique runs and one run per commit
+      - name: Enforce one authorized run #7 and exact source artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           EXPECTED_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          test "$RUN_NUMBER" = "7"
+          test "$BRANCH" = "feat/letter-card-silma-20261127"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
-          runs="$(gh api "repos/$REPOSITORY/actions/workflows/letter-card-pipeline.yml/runs?per_page=100")"
-          printf '%s' "$runs" | jq -e --arg sha "$EXPECTED_SHA" '
-            [.workflow_runs[]
-             | select(.event == "workflow_dispatch"
-                      and .head_branch == "feat/letter-card-silma-20261127"
-                      and .run_attempt == 1)] as $selected
-            | ($selected | length) <= 3
-              and ([$selected[] | select(.head_sha == $sha)] | length) == 1
-          ' >/dev/null
-          echo "RUN_LIMIT_AND_COMMIT_GUARD=PASS"
-
-      - name: Confirm exact owner-approved script and source assets exist
-        run: |
-          test -s assets/episodes/letter-alif.json
-          test -s assets/audio/manifest.json
-          test -s assets/audio/chunks/01-pistachio.wav
-          python3 - <<'PY'
-          import json
+          python - <<'PY'
+          import json, os
           from pathlib import Path
-          script = json.loads(Path("assets/episodes/letter-alif.json").read_text(encoding="utf-8"))
-          assert script.get("schemaVersion") == 1
-          assert script.get("status") == "approved-script"
-          assert script.get("episodeId") == "letter-alif"
-          assert len(script.get("chunks", [])) == 8
-          print("EXACT_EIGHT_CHUNK_SCRIPT=PASS")
+          r=json.loads(Path("run-requests/alif-006.json").read_text())
+          assert r["episodeId"]=="letter-alif"
+          assert r["confirm_new_episode_run"] is True
+          assert r["runNumber"]==7
+          assert r["expectedBranch"]=="feat/letter-card-silma-20261127"
+          assert r["expectedParent"]=="0e2dbaf190913020d189f1c3365ec7326752b8f9"
+          assert r["run6ArtifactId"]==46068424765
+          assert r["calibrationArtifactId"]==15253057317
+          assert r["seed"]==4250
+          assert r["candidateSha256"]["wav"]=="3649358adab289d936bfe09551624f646bc5b35b1f43eef0b44739da802ae3da"
+          assert r["candidateSha256"]["mp3"]=="3a9459f3115007cdd0e6871b72367c45bb589e654ce293ae3d886bd2756502f8"
+          assert os.environ["RUN_ID"].isdigit()
+          print("OWNER_REQUEST_GATE=PASS")
           PY
+          test "$(git rev-parse HEAD^)" = "0e2dbaf190913020d189f1c3365ec7326752b8f9"
+          runs="$(gh api "repos/$REPOSITORY/actions/workflows/letter-card-pipeline.yml/runs?per_page=100")"
+          printf '%s' "$runs" | jq -e --arg sha "$EXPECTED_SHA" --arg run "$RUN_ID" '
+            [.workflow_runs[] | select(.head_branch=="feat/letter-card-silma-20261127" and .run_attempt==1)] as $all
+            | ([$all[] | select(.run_number==7 and .id==($run|tonumber) and .head_sha==$sha)] | length)==1
+              and ([$all[] | select(.run_number<7)] | length)==6
+              and ([$all[] | select(.run_number>7)] | length)==0
+          ' >/dev/null
+          echo "RUN_COUNT_6_TO_7_GUARD=PASS"
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
@@ -73,83 +74,212 @@ jobs:
           python-version: "3.12"
           check-latest: true
 
-      - name: Run unit tests before any synthesis
+      - name: Install CPU render and QA tools
         run: |
-          python -m venv .venv
-          .venv/bin/python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
-          .venv/bin/python -m compileall -q scripts tests
-          .venv/bin/python -m unittest discover -s tests -v
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0
+          python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
+          python -c "from PIL import features; assert features.check('raqm'), 'Arabic RAQM is required'"
+          ffmpeg -version | head -n 1
+          rsvg-convert --version
+
+      - name: Run repository tests before media replacement
+        run: |
+          set -euo pipefail
+          python -m compileall -q scripts tests
+          python -m unittest discover -s tests -v
+          python -m py_compile scripts/render_letter_card.py scripts/replace_silma_chunk.py
           node --check scripts/letter_card_qa.mjs
           node --check src/production/audio-mixer.js
           node --check src/production/video-qa.js
           for file in scripts/*.sh; do [ -f "$file" ] || continue; bash -n "$file"; done
           echo "UNIT_CHECKS=PASS"
 
-      - name: Install no-SILMA smoke rendering tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y ffmpeg librsvg2-bin fonts-noto-core python3-pil libraqm0
-          python -m pip install --disable-pip-version-check --no-input --only-binary=:all: Pillow
-          python -c "from PIL import features; assert features.check('raqm'), 'Arabic RAQM is required'"
-          rsvg-convert --version
-
-      - name: Run real-input template smoke before SILMA
-        run: |
-          python3 -m py_compile scripts/render_letter_card.py
-          python3 scripts/render_letter_card.py \
-            --smoke \
-            --source-manifest assets/audio/manifest.json \
-            --source-wav assets/audio/chunks/01-pistachio.wav \
-            --output-dir build/letter-card-smoke
-          test -s build/letter-card-smoke/letter-card-smoke.mp4
-          jq -e '.status == "pass" and .sourceUnmodified == true' build/letter-card-smoke/smoke-report.json >/dev/null
-
-      - name: Initialize isolated generation output
-        run: mkdir -p artifacts/silma-letter-card/logs artifacts/silma-letter-card/references artifacts/silma-letter-card/chunks
-
-      - name: Install CPU-only SILMA runtime
-        run: bash scripts/install_cpu_stack.sh 2>&1 | tee artifacts/silma-letter-card/logs/install.log
-
-      - name: Generate fresh Method A eSpeak references and record new hashes
-        run: bash scripts/prepare_silma_method_a.sh artifacts/silma-letter-card/references 2>&1 | tee artifacts/silma-letter-card/logs/references.log
-
-      - name: Compile SILMA runner and validator
-        run: python -m py_compile scripts/silma_episode.py scripts/validate_silma_episode.py
-
-      - name: Execute one CPU SILMA generation with atomic per-chunk checkpoints
+      - name: Download exact Run 6 and approved seed 4250 artifacts
         env:
-          HF_HUB_DISABLE_TELEMETRY: "1"
-          HF_HUB_DOWNLOAD_TIMEOUT: "600"
-          PYTHONUNBUFFERED: "1"
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          timeout --signal=TERM --kill-after=30s 3600s \
-            python scripts/silma_episode.py \
-              --references-dir artifacts/silma-letter-card/references \
-              --output-dir artifacts/silma-letter-card \
-              --episode-manifest assets/episodes/letter-alif.json \
-              2>&1 | tee artifacts/silma-letter-card/logs/generation.log
+          mkdir -p /tmp/run6 /tmp/calibration
+          gh run download 46068424765 --repo "$REPOSITORY" --name letter-card-alif-46068424765 --dir /tmp/run6
+          gh run download 46119257810 --repo "$REPOSITORY" --name silma-chunk-03-calibration-seed-trials-46119257810 --dir /tmp/calibration
+          test -s /tmp/run6/artifacts/silma-letter-card/manifest.json
+          test -s /tmp/calibration/artifacts/seed-trials/selected-candidate/manifest.json
+          echo "SOURCE_ARTIFACTS_DOWNLOADED=PASS"
 
-      - name: Validate eight MP3/WAV chunks, reference hashes and both model weights
+      - name: Verify candidate hashes and preserve all other 14 media files
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          base=Path('/tmp/run6/artifacts/silma-letter-card')
+          candidate=Path('/tmp/calibration/artifacts/seed-trials/selected-candidate')
+          expected={'wav':'3649358adab289d936bfe09551624f646bc5b35b1f43eef0b44739da802ae3da',
+                    'mp3':'3a9459f3115007cdd0e6871b72367c45bb589e654ce293ae3d886bd2756502f8'}
+          sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest()
+          m=json.loads((base/'manifest.json').read_text())
+          c=json.loads((candidate/'manifest.json').read_text())
+          item=c['completedChunks'][0]
+          assert item['chunkId']=='chunk-03' and item['settings']['seed']==4250
+          for k in ('wav','mp3'): assert sha(candidate/item[k]['path'])==expected[k]
+          before={}
+          for row in m['completedChunks']:
+              if row['chunkId']=='chunk-03': continue
+              for k in ('wav','mp3'):
+                  p=base/row[k]['path']; assert sha(p)==row[k]['sha256']
+                  before[f"{row['chunkId']}:{k}"]=sha(p)
+          Path('artifacts/preflight').mkdir(parents=True,exist_ok=True)
+          Path('artifacts/preflight/baseline-preserved-media.json').write_text(json.dumps(before,indent=2)+'\n')
+          print(json.dumps({'candidate':'PASS','seed':4250,'unrelatedMediaFingerprints':len(before)},indent=2))
+          PY
+
+      - name: Replace chunk 03 only with the approved seed 4250
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/silma-letter-card
+          cp -a /tmp/run6/artifacts/silma-letter-card/. artifacts/silma-letter-card/
+          python scripts/replace_silma_chunk.py \
+            --base-dir artifacts/silma-letter-card \
+            --candidate-dir /tmp/calibration/artifacts/seed-trials/selected-candidate \
+            --chunk-id chunk-03 \
+            --reference-approval-manifest assets/references/pistachio-method-a-approval.json \
+            | tee artifacts/preflight/replacement-result.json
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('artifacts/silma-letter-card')
+          result=json.loads(Path('artifacts/preflight/replacement-result.json').read_text())
+          m=json.loads((root/'manifest.json').read_text())
+          baseline=json.loads(Path('artifacts/preflight/baseline-preserved-media.json').read_text())
+          assert result['status']=='replaced' and result['seed']==4250
+          assert result['preservedChunkCount']==7 and result['preservedMediaCount']==14
+          assert len(m['completedChunks'])==8
+          assert m['replacementHistory'][-1]['chunkId']=='chunk-03' and m['replacementHistory'][-1]['seed']==4250
+          assert (root/'measurement-table.csv').is_file()
+          after={}
+          for row in m['completedChunks']:
+              if row['chunkId']=='chunk-03': continue
+              for k in ('wav','mp3'):
+                  after[f"{row['chunkId']}:{k}"]=hashlib.sha256((root/row[k]['path']).read_bytes()).hexdigest()
+          assert after==baseline and result['preservedMediaSha256']==baseline
+          assert m['episode']['wav']['sha256'] and m['episode']['mp3']['sha256']
+          print(json.dumps({'replacement':'PASS','preservedFiles':14,'manifestAndHistory':'updated',
+            'measurementTable':'updated','episodeWavSha256':m['episode']['wav']['sha256'],
+            'episodeMp3Sha256':m['episode']['mp3']['sha256']},indent=2))
+          PY
+
+      - name: Run mandatory -50dB silencedetect on all source and edge-trimmed chunks
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,re,subprocess
+          from pathlib import Path
+          root=Path('artifacts/silma-letter-card')
+          m=json.loads((root/'manifest.json').read_text())
+          out=Path('artifacts/preflight'); out.mkdir(parents=True,exist_ok=True)
+          trimmed=Path('artifacts/preflight/edge-trimmed'); trimmed.mkdir(parents=True,exist_ok=True)
+          filt=('silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:'
+            'start_silence=0.10:window=0.02,areverse,'
+            'silenceremove=start_periods=1:start_duration=0.02:start_threshold=-50dB:'
+            'start_silence=0.10:window=0.02,areverse')
+          def detect(p):
+              x=subprocess.run(['ffmpeg','-hide_banner','-nostdin','-i',str(p),
+                '-af','silencedetect=noise=-50dB:d=0.02','-f','null','-'],
+                text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+              if x.returncode: raise RuntimeError(f"silencedetect failed for {p}: {x.stderr[-2000:]}")
+              return max([float(v) for v in re.findall(r'silence_duration:\\s*([0-9.]+)',x.stderr)] or [0.0])
+          rows=[]
+          for row in m['completedChunks']:
+              for media in ('wav','mp3'):
+                  src=root/row[media]['path']; source_max=detect(src)
+                  dst=trimmed/(src.stem+'.trimmed.'+media)
+                  args=['ffmpeg','-hide_banner','-nostdin','-loglevel','error','-y','-i',str(src),
+                    '-af',filt,'-ar','24000','-ac','1']
+                  args += (['-c:a','pcm_s16le'] if media=='wav' else ['-codec:a','libmp3lame','-b:a','128k'])
+                  args += [str(dst)]
+                  x=subprocess.run(args,text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+                  if x.returncode: raise RuntimeError(f"edge trim failed for {src}: {x.stderr[-2000:]}")
+                  trimmed_max=detect(dst)
+                  rows.append({'chunkId':row['chunkId'],'media':media,
+                    'sourceLongestSilenceSeconds':round(source_max,6),
+                    'edgeTrimmedLongestSilenceSeconds':round(trimmed_max,6),
+                    'sourcePass':source_max<0.5,'edgeTrimmedPass':trimmed_max<0.5})
+          failures=[x for x in rows if not x['sourcePass'] or not x['edgeTrimmedPass']]
+          report={'status':'fail' if failures else 'pass','thresholdSeconds':0.5,
+            'noiseThreshold':'-50dB','minimumSilenceDurationSeconds':0.02,
+            'filesChecked':len(rows),'rows':rows,'failures':failures}
+          (out/'silencedetect-report.json').write_text(json.dumps(report,indent=2)+'\n')
+          print(json.dumps(report,indent=2))
+          if failures: raise SystemExit(1)
+          timeline=[]; cursor=0.0
+          for row in m['completedChunks']:
+              p=trimmed/(Path(row['wav']['path']).stem+'.trimmed.wav')
+              d=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration',
+                '-of','default=noprint_wrappers=1:nokey=1',str(p)],text=True).strip())
+              timeline.append({'chunkId':row['chunkId'],'startSeconds':round(cursor,6),'durationSeconds':round(d,6)})
+              cursor+=d+(0.20 if len(timeline)<8 else 0)
+          (out/'trimmed-render-timeline.json').write_text(json.dumps({
+            'source':'edge-trimmed WAV durations measured by ffprobe','interChunkPauseSeconds':0.20,
+            'durationSeconds':round(cursor,6),'segments':timeline},indent=2)+'\n')
+          PY
+          echo "ALL_16_SOURCE_AND_TRIMMED_MEDIA_SILENCE_CHECKS=PASS"
+
+      - name: Render original SVG Alif episode from replaced Run 6 audio
         if: success()
         run: |
-          python scripts/validate_silma_episode.py artifacts/silma-letter-card assets/episodes/letter-alif.json \
-            2>&1 | tee artifacts/silma-letter-card/logs/validation.log
-
-      - name: Render original SVG Alif episode on CPU
-        if: success()
-        run: |
+          set -euo pipefail
           python -m py_compile scripts/render_letter_card.py
           python scripts/render_letter_card.py \
             --generation-dir artifacts/silma-letter-card \
             --output-dir build/letter-card \
-            2>&1 | tee artifacts/silma-letter-card/logs/render.log
+            2>&1 | tee artifacts/silma-letter-card/logs/render-replacement.log
           test -s build/letter-card/letter-card-video-raw.mp4
           test -s build/letter-card/render-report.json
 
       - name: Run Audio Mix QA
         if: success()
         run: node scripts/letter_card_qa.mjs artifacts/silma-letter-card build/letter-card audio-mix
+
+      - name: Print every Audio Mix QA measurement and limit if Audio Mix QA fails
+        if: failure()
+        run: |
+          python - <<'PY'
+          import json,subprocess
+          from pathlib import Path
+          d=Path('build/letter-card')
+          video=d/'letter-card-video-raw.mp4'
+          mixed=d/'episode-audio-mix.wav'
+          if not video.exists() or not mixed.exists():
+              print(json.dumps({'diagnostic':'mix output or raw video missing; upstream step failed before measurements',
+                'rawVideoExists':video.exists(),'mixedWavExists':mixed.exists()},indent=2))
+              raise SystemExit(0)
+          def probe(p):
+              return json.loads(subprocess.check_output(['ffprobe','-v','error','-show_entries',
+                'stream=codec_name,codec_type,sample_rate,channels,duration:format=duration','-of','json',str(p)],text=True))
+          vp=probe(video); ap=probe(mixed)
+          v=next(x for x in vp['streams'] if x['codec_type']=='video')
+          a=next(x for x in ap['streams'] if x['codec_type']=='audio')
+          vd=float(v.get('duration') or vp['format']['duration'])
+          ad=float(a.get('duration') or ap['format']['duration'])
+          p=subprocess.run(['ffmpeg','-hide_banner','-nostdin','-i',str(mixed),'-map','0:a:0',
+            '-af','silencedetect=noise=-50dB:d=0.02','-vn','-f','null','-'],
+            text=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+          import re
+          seg=[float(x) for x in re.findall(r'silence_duration:\\s*([0-9.]+)',p.stderr)]
+          maxsil=max(seg or [0.0])
+          checks=[
+            {'name':'wav_codec','value':a.get('codec_name'),'limit':'pcm_s16le'},
+            {'name':'sample_rate','value':int(a.get('sample_rate',0)),'limit':48000},
+            {'name':'channels','value':a.get('channels'),'limit':2},
+            {'name':'duration_matches_video','value':abs(vd-ad),'limit':0.08},
+            {'name':'continuous_audio','value':maxsil,'limit':0.5,'noiseThreshold':'-50dB','minimumSilenceDurationSeconds':0.02}
+          ]
+          print(json.dumps({'status':'diagnostic','checks':checks,'rawVideoDurationSeconds':vd,
+            'mixedAudioDurationSeconds':ad,'silenceDetectReturnCode':p.returncode},indent=2))
+          PY
 
       - name: Run Video QA with unchanged 0.5-second silence limit
         if: success()
@@ -158,27 +288,31 @@ jobs:
           jq -e '.status == "pass" and .protectedSilenceLimitSeconds == 0.5 and .sourceMediaUnmodified == true' \
             build/letter-card/audio-video-qa-report.json >/dev/null
 
-      - name: Upload video, eight MP3 chunks, three frames, hashes and QA reports
-        if: success()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - name: Upload MP4, all eight MP3/WAV chunks, preview frames, full frames and QA evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: letter-card-alif-${{ github.run_id }}
           path: |
             build/letter-card/letter-card-episode.mp4
-            build/letter-card/preview/letter-card.png
-            build/letter-card/preview/word-rabbit.png
-            build/letter-card/preview/final-scene.png
+            build/letter-card/letter-card-video-raw.mp4
+            build/letter-card/episode-audio.wav
+            build/letter-card/episode-audio-mix.wav
             build/letter-card/render-report.json
             build/letter-card/audio-mix-qa-report.json
             build/letter-card/video-qa-report.json
             build/letter-card/audio-video-qa-report.json
+            build/letter-card/preview/*.png
+            build/letter-card/frames/*.png
             artifacts/silma-letter-card/chunks/*.mp3
             artifacts/silma-letter-card/chunks/*.wav
             artifacts/silma-letter-card/manifest.json
+            artifacts/silma-letter-card/measurement-table.csv
             artifacts/silma-letter-card/weight-preflight.json
             artifacts/silma-letter-card/references/reference-manifest.json
             artifacts/silma-letter-card/logs/*.log
-            build/letter-card-smoke/smoke-report.json
-          if-no-files-found: error
+            artifacts/preflight/*.json
+            artifacts/preflight/edge-trimmed/*
+          if-no-files-found: warn
           compression-level: 0
           retention-days: 7
