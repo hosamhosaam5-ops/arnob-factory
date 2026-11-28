@@ -28,5 +28,32 @@
     "sha256": "31bcd745b476ea64d5a03ee6b8bf285de5ae822537f27c14902f2043f5ce0836",
     "reproducible": false,
     "note": "بصمة Run #6 القديمة لا يمكن إعادة إنتاجها؛ اعتُمد هذا المرجع الجديد كبصمة صوتية معلنة، مع تثبيت PCM."
+  },
+  "file": "pistachio-reference.wav",
+  "fileSha256": "f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+  "verification": {
+    "mode": "pcm-sha256-only",
+    "pcmAlgorithm": "sha256 of WAV PCM frame bytes from wave.readframes",
+    "sampleRate": 24000,
+    "channels": 1,
+    "sampleWidthBytes": 2
+  },
+  "references": {
+    "pistachio": {
+      "file": "pistachio-reference.wav",
+      "fileSha256": "f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+      "pcmSha256": "724b5f6020aef1f87d0942d15cb2f6aa78a70fbbfbf86d2800cd2b99972a49cb",
+      "sampleRate": 24000,
+      "channels": 1,
+      "samples": 115637
+    },
+    "hazelnut": {
+      "file": "hazelnut-reference.wav",
+      "fileSha256": "d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+      "pcmSha256": "225479707276b3947c1e453da4074798b968183a2a969ceae0869ca69e14e9da",
+      "sampleRate": 24000,
+      "channels": 1,
+      "samples": 134371
+    }
   }
 }
