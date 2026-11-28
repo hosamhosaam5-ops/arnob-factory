@@ -1,67 +1,156 @@
 #!/usr/bin/env bash
 set -euo pipefail
-output_dir="artifacts/silma-episode-pilot/references"
+
+output_dir="artifacts/silma-letter-card/references"
 if [[ "$#" -gt 0 && -n "$1" ]]; then output_dir="$1"; fi
-mkdir -p "$output_dir"
-for command in espeak-ng ffmpeg ffprobe python3; do
-  command -v "$command" >/dev/null 2>&1 || { echo "Required command missing: $command" >&2; exit 1; }
-done
+source_dir="${ARNOB_COMMITTED_REFERENCES_DIR:-assets/references}"
 approval_manifest="${ARNOB_REFERENCE_APPROVAL_MANIFEST:-assets/references/pistachio-method-a-approval.json}"
-approved_reference="${ARNOB_PISTACHIO_REFERENCE_FILE:-}"
-if [[ ! -s "$approval_manifest" ]]; then
-  echo "Missing approved Pistachio reference manifest: $approval_manifest" >&2
+mkdir -p "$output_dir"
+
+command -v python3 >/dev/null 2>&1 || {
+  echo "Required command missing: python3" >&2
   exit 1
-fi
-reference_text="مَرْحَبًا، هَذَا صَوْتٌ تَجْرِيبِيٌّ لِشَخْصِيَّةٍ كَرْتُونِيَّةٍ."
-if [[ -n "$approved_reference" ]]; then
-  test -s "$approved_reference"
-  cp "$approved_reference" "$output_dir/pistachio-reference.wav"
-else
-  espeak-ng -v "ar+f3" -s 160 -p 68 -w "$output_dir/pistachio-source.wav" "$reference_text"
-  ffmpeg -hide_banner -nostdin -loglevel error -y -i "$output_dir/pistachio-source.wav" -map 0:a:0 -vn -ac 1 -ar 24000 -c:a pcm_s16le "$output_dir/pistachio-reference.wav"
-fi
-espeak-ng -v "ar+m3" -s 140 -p 43 -w "$output_dir/hazelnut-source.wav" "$reference_text"
-ffmpeg -hide_banner -nostdin -loglevel error -y -i "$output_dir/hazelnut-source.wav" -map 0:a:0 -vn -ac 1 -ar 24000 -c:a pcm_s16le "$output_dir/hazelnut-reference.wav"
-python3 - "$output_dir" "$approval_manifest" <<'PY'
-import hashlib, json, math, sys, wave
-from pathlib import Path
-import soundfile as sf
-root = Path(sys.argv[1])
-approval = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-reference_text = approval["referenceText"]
-personas = {
-    "pistachio": {"voice":"ar+f3","speed":160,"pitch":68,"file":"pistachio-reference.wav"},
-    "hazelnut": {"voice":"ar+m3","speed":140,"pitch":43,"file":"hazelnut-reference.wav"},
 }
-def sha256(path):
-    digest=hashlib.sha256()
+test -s "$approval_manifest"
+
+python3 - "$source_dir" "$output_dir" "$approval_manifest" <<'PY'
+import hashlib
+import json
+import shutil
+import sys
+import wave
+from pathlib import Path
+
+source_dir = Path(sys.argv[1])
+output_dir = Path(sys.argv[2])
+approval_path = Path(sys.argv[3])
+approval = json.loads(approval_path.read_text(encoding="utf-8"))
+
+persona_settings = {
+    "pistachio": {
+        "voice": "ar+f3", "speed": 160, "pitch": 68,
+        "file": "pistachio-reference.wav",
+    },
+    "hazelnut": {
+        "voice": "ar+m3", "speed": 140, "pitch": 43,
+        "file": "hazelnut-reference.wav",
+    },
+}
+
+def sha256_bytes(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for block in iter(lambda:stream.read(1024*1024),b""): digest.update(block)
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
     return digest.hexdigest()
-files={}
-for persona, config in personas.items():
-    path=root/config["file"]
-    audio, rate=sf.read(path,dtype="float32",always_2d=True)
-    duration=len(audio)/float(rate)
-    if rate != 24000 or audio.shape[1] != 1 or audio.size == 0 or not math.isfinite(float(abs(audio).max())):
-        raise SystemExit(f"Method A reference preflight failed: {path}")
-    details={"path":config["file"],"sha256":sha256(path),"sizeBytes":path.stat().st_size,"durationSeconds":round(duration,6),"sampleRate":rate,"channels":int(audio.shape[1])}
-    if persona=="pistachio":
-        with wave.open(str(path),"rb") as wav:
-            if wav.getnchannels()!=1 or wav.getframerate()!=24000 or wav.getsampwidth()!=2:
-                raise SystemExit("Approved Pistachio reference must be mono 24kHz PCM s16le")
-            pcm=wav.readframes(wav.getnframes())
-            samples=wav.getnframes()
-        pcm_sha=hashlib.sha256(pcm).hexdigest()
-        if samples!=approval["samples"] or path.stat().st_size!=approval["sizeBytes"] or pcm_sha!=approval["pcmSha256"]:
-            raise SystemExit(f"Pistachio reference approval mismatch: samples={samples} pcm_sha256={pcm_sha}")
-        details.update({"approvalId":approval["approvalId"],"approvalName":approval["name"],"canonicalSha256":approval["sha256"],"pcmSha256":pcm_sha,"legacyReferenceSha256":approval["supersedes"]["sha256"],"legacyReferenceReproducible":approval["supersedes"]["reproducible"],"approvalNote":approval["supersedes"]["note"]})
-    files[persona]=details
-    print(f"REFERENCE={persona} voice={config['voice']} speed={config['speed']} pitch={config['pitch']} sha256={details['sha256']} duration={duration:.6f}s")
-manifest={"method":"A","engine":"eSpeak NG","referenceText":reference_text,"license":"GPL-3.0-or-later","personas":personas,"files":files,"referenceApproval":{"approvalId":approval["approvalId"],"name":approval["name"],"legacyReferenceSha256":approval["supersedes"]["sha256"],"legacyReferenceReproducible":False,"note":approval["supersedes"]["note"]}}
-(root/"reference-manifest.json").write_text(json.dumps(manifest,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
-print("METHOD_A_REFERENCE_PREFLIGHT=PASS")
+
+verification = approval.get("verification", {})
+if verification.get("mode") != "pcm-sha256-only":
+    raise SystemExit("Reference policy must be pcm-sha256-only")
+if verification.get("sampleRate") != 24000 or verification.get("channels") != 1:
+    raise SystemExit("Approved Method A references must be mono 24kHz PCM")
+if verification.get("sampleWidthBytes") != 2:
+    raise SystemExit("Approved Method A references must be 16-bit PCM")
+
+files = {}
+for persona, config in persona_settings.items():
+    approved = approval.get("references", {}).get(persona)
+    if not isinstance(approved, dict):
+        raise SystemExit(f"Missing committed PCM approval entry for {persona}")
+    file_name = config["file"]
+    if approved.get("file") != file_name:
+        raise SystemExit(f"Reference file name mismatch for {persona}")
+    source = source_dir / file_name
+    target = output_dir / file_name
+    if not source.is_file() or source.stat().st_size == 0:
+        raise SystemExit(f"Missing committed reference WAV: {source}")
+
+    with wave.open(str(source), "rb") as wav:
+        channels = wav.getnchannels()
+        sample_rate = wav.getframerate()
+        sample_width = wav.getsampwidth()
+        samples = wav.getnframes()
+        pcm = wav.readframes(samples)
+
+    if (channels, sample_rate, sample_width) != (1, 24000, 2):
+        raise SystemExit(
+            f"Reference container mismatch for {persona}: "
+            f"channels={channels} rate={sample_rate} sample_width={sample_width}"
+        )
+    pcm_sha = sha256_bytes(pcm)
+    if pcm_sha != approved.get("pcmSha256"):
+        raise SystemExit(
+            f"REFERENCE_PCM_SHA256_MISMATCH {persona} "
+            f"expected={approved.get('pcmSha256')} actual={pcm_sha}"
+        )
+    if samples != approved.get("samples"):
+        raise SystemExit(
+            f"REFERENCE_SAMPLE_COUNT_MISMATCH {persona} "
+            f"expected={approved.get('samples')} actual={samples}"
+        )
+
+    if source.resolve() != target.resolve():
+        shutil.copy2(source, target)
+
+    file_sha = sha256_file(target)
+    duration = samples / float(sample_rate)
+    files[persona] = {
+        "path": file_name,
+        "sha256": file_sha,
+        "sizeBytes": target.stat().st_size,
+        "durationSeconds": round(duration, 6),
+        "sampleRate": sample_rate,
+        "channels": channels,
+        "samples": samples,
+        "pcmSha256": pcm_sha,
+        "verification": "pcm-sha256-only",
+        "approvalId": (
+            approval.get("approvalId")
+            if persona == "pistachio"
+            else "hazelnut-method-a-pinned-v1"
+        ),
+        "voice": config["voice"],
+        "speed": config["speed"],
+        "pitch": config["pitch"],
+    }
+    print(
+        f"REFERENCE={persona} pcm_sha256={pcm_sha} "
+        f"file_sha256={file_sha} duration={duration:.6f}s"
+    )
+
+manifest = {
+    "method": "A",
+    "engine": "committed approved WAV references",
+    "referenceText": approval["referenceText"],
+    "license": "GPL-3.0-or-later",
+    "personas": {
+        persona: {
+            "voice": config["voice"],
+            "speed": config["speed"],
+            "pitch": config["pitch"],
+            "file": config["file"],
+        }
+        for persona, config in persona_settings.items()
+    },
+    "files": files,
+    "referenceApproval": {
+        "approvalId": approval["approvalId"],
+        "name": approval["name"],
+        "legacyReferenceSha256": approval["supersedes"]["sha256"],
+        "legacyReferenceReproducible": approval["supersedes"]["reproducible"],
+        "note": approval["supersedes"]["note"],
+        "verification": "pcm-sha256-only",
+    },
+}
+(output_dir / "reference-manifest.json").write_text(
+    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+print("METHOD_A_REFERENCE_PCM_PREFLIGHT=PASS")
 PY
-printf 'eSpeak NG: '
-espeak-ng --version | head -n 1
+
+echo "Reference policy: committed PCM only; no eSpeak regeneration."
 sha256sum "$output_dir"/*reference.wav
