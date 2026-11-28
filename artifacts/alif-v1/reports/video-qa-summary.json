@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "file": {
+    "path": "/home/runner/work/arnob-factory/arnob-factory/build/letter-card/letter-card-episode.mp4",
+    "sizeBytes": 1733199
+  },
+  "measurements": {
+    "durationSeconds": 22.291667,
+    "videoDurationSeconds": 22.291667,
+    "audioDurationSeconds": 22.291,
+    "avDurationDifferenceSeconds": 0.0006669999999999732,
+    "width": 1280,
+    "height": 720,
+    "videoCodec": "h264",
+    "audioCodec": "aac"
+  },
+  "limits": {
+    "maxBlackSegmentSeconds": 0.25,
+    "maxSilenceSegmentSeconds": 0.5,
+    "maxAvDurationDifferenceSeconds": 0.15,
+    "maxDurationSeconds": 300,
+    "maxFileSizeBytes": 536870912,
+    "blackDetectMinSeconds": 0.02,
+    "silenceDetectMinSeconds": 0.02,
+    "blackPixelThreshold": 0.1,
+    "blackPictureThreshold": 0.98,
+    "silenceNoise": "-50dB"
+  },
+  "checks": [
+    {"name":"black_frames","value":0,"limit":0.25,"unit":"seconds","status":"pass","details":{"segments":[],"detector":"blackdetect"}},
+    {"name":"silence","value":0.445229,"limit":0.5,"unit":"seconds","status":"pass","details":{"detector":"silencedetect"}},
+    {"name":"av_duration_difference","value":0.0006669999999999732,"limit":0.15,"unit":"seconds","status":"pass","details":{"videoDurationSeconds":22.291667,"audioDurationSeconds":22.291}},
+    {"name":"maximum_duration","value":22.291667,"limit":300,"unit":"seconds","status":"pass"},
+    {"name":"maximum_file_size","value":1733199,"limit":536870912,"unit":"bytes","status":"pass"},
+    {"name":"video_stream_present","value":true,"limit":true,"unit":"boolean","status":"pass"},
+    {"name":"audio_stream_present","value":true,"limit":true,"unit":"boolean","status":"pass"},
+    {"name":"video_codec","value":"h264","limit":"h264","unit":"codec","status":"pass"},
+    {"name":"audio_codec","value":"aac","limit":"aac","unit":"codec","status":"pass"}
+  ],
+  "passed": true,
+  "status": "pass",
+  "evidence": {
+    "ffprobe": {
+      "programs": [],
+      "stream_groups": [],
+      "streams": [
+        {"index":0,"codec_name":"h264","codec_type":"video","width":1280,"height":720,"r_frame_rate":"24/1","avg_frame_rate":"24/1","duration":"22.291667"},
+        {"index":1,"codec_name":"aac","codec_type":"audio","r_frame_rate":"0/0","avg_frame_rate":"0/0","duration":"22.291000"}
+      ],
+      "format": {"duration":"22.291667","size":"1733199"}
+    },
+    "blackdetectStderr": "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/home/runner/work/arnob-factory/arnob-factory/build/letter-card/letter-card-episode.mp4':\n  Metadata:\n    major_brand     : isom\n    minor_version   : 512\n    compatible_brands: isomiso2avc1mp41\n    encoder         : Lavf62.3.100\n  Duration: 00:00:22.29, start: 0.000000, bitrate: 622 kb/s\n  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 1280x720, 493 kb/s, 24 fps, 24 tbr, 12288 tbn (default)\n    Metadata:\n      handler_name: VideoHandler\n      vendor_id: [0][0][0][0]\n      encoder: Lavc62.11.100 libx264\n  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 122 kb/s (default)\n    Metadata:\n      handler_name: SoundHandler\n      vendor_id: [0][0][0][0]\nStream mapping:\n  Stream #0:0 -> #0:0 (h264 (native) -> wrapped_avframe (native))\nPress [q] to stop, [?] for help\nOutput #0, null, to 'pipe:':\n  Metadata:\n    major_brand: isom\n    minor_version: 512\n    compatible_brands: isomiso2avc1mp41\n    encoder: Lavf62.3.100\n  Stream #0:0(und): Video: wrapped_avframe, yuv420p(progressive), 1280x720, q=2-31, 200 kb/s, 24 fps, 24 tbn (default)\n    Metadata:\n      encoder: Lavc62.11.100 wrapped_avframe\n      handler_name: VideoHandler\n      vendor_id: [0][0][0][0]\n[out#0/null @ 0x5a2af9cda640] video:217KiB audio:0KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nframe=  535 fps=0.0 q=-0.0 Lsize=N/A time=00:00:22.29 bitrate=N/A speed=45.7x elapsed=0:00:00.48    \n",
+    "silencedetectStderr": "Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/home/runner/work/arnob-factory/arnob-factory/build/letter-card/letter-card-episode.mp4':\n  Metadata:\n    major_brand: isom\n    minor_version: 512\n    compatible_brands: isomiso2avc1mp41\n    encoder: Lavf62.3.100\n  Duration: 00:00:22.29, start: 0.000000, bitrate: 622 kb/s\n  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 1280x720, 493 kb/s, 24 fps, 24 tbr, 12288 tbn (default)\n    Metadata:\n      handler_name: VideoHandler\n      vendor_id: [0][0][0][0]\n      encoder: Lavc62.11.100 libx264\n  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 122 kb/s (default)\n    Metadata:\n      handler_name: SoundHandler\n      vendor_id: [0][0][0][0]\nStream mapping:\n  Stream #0:1 -> #0:0 (aac (native) -> pcm_s16le (native))\nPress [q] to stop, [?] for help\nOutput #0, null, to 'pipe:':\n  Metadata:\n    major_brand: isom\n    minor_version: 512\n    compatible_brands: isomiso2avc1mp41\n    encoder: Lavf62.3.100\n  Stream #0:0(und): Audio: pcm_s16le, 48000 Hz, stereo, s16, 1536 kb/s (default)\n    Metadata:\n      encoder: Lavc62.11.100 pcm_s16le\n      handler_name: SoundHandler\n      vendor_id: [0][0][0][0]\n[silencedetect @ 0x79b8940021c0] silence_start: 0.627354\n[silencedetect @ 0x79b8940021c0] silence_end: 0.662542 | silence_duration: 0.0351875\n[silencedetect @ 0x79b8940021c0] silence_start: 0.795625\n[silencedetect @ 0x79b8940021c0] silence_end: 0.855812 | silence_duration: 0.0601875\n[silencedetect @ 0x79b8940021c0] silence_start: 1.237292\n[silencedetect @ 0x79b8940021c0] silence_end: 1.325063 | silence_duration: 0.0877708\n[silencedetect @ 0x79b8940021c0] silence_start: 1.752104\n[silencedetect @ 0x79b8940021c0] silence_end: 1.80375 | silence_duration: 0.0516458\n[silencedetect @ 0x79b8940021c0] silence_start: 1.934167\n[silencedetect @ 0x79b8940021c0] silence_end: 2.042667 | silence_duration: 0.1085\n[silencedetect @ 0x79b8940021c0] silence_start: 2.104854\n[silencedetect @ 0x79b8940021c0] silence_end: 2.304875 | silence_duration: 0.200021\n[silencedetect @ 0x79b8940021c0] silence_start: 3.143312\n[silencedetect @ 0x79b8940021c0] silence_end: 3.264167 | silence_duration: 0.120854\n[silencedetect @ 0x79b8940021c0] silence_start: 3.325375\n[silencedetect @ 0x79b8940021c0] silence_end: 3.63575 | silence_duration: 0.310375\n[silencedetect @ 0x79b8940021c0] silence_start: 4.238187\n[silencedetect @ 0x79b8940021c0] silence_end: 4.271833 | silence_duration: 0.0336458\n[silencedetect @ 0x79b8940021c0] silence_start: 5.822542\n[silencedetect @ 0x79b8940021c0] silence_end: 6.071229 | silence_duration: 0.248687\n[silencedetect @ 0x79b8940021c0] silence_start: 6.400062\n[silencedetect @ 0x79b8940021c0] silence_end: 6.839625 | silence_duration: 0.439562\n[silencedetect @ 0x79b8940021c0] silence_start: 8.428958\n[silencedetect @ 0x79b8940021c0] silence_end: 8.689854 | silence_duration: 0.260896\n[silencedetect @ 0x79b8940021c0] silence_start: 9.035396\n[silencedetect @ 0x79b8940021c0] silence_end: 9.074521 | silence_duration: 0.039125\n[silencedetect @ 0x79b8940021c0] silence_start: 9.138167\n[silencedetect @ 0x79b8940021c0] silence_end: 9.583396 | silence_duration: 0.445229\n[silencedetect @ 0x79b8940021c0] silence_start: 10.084583\n[silencedetect @ 0x79b8940021c0] silence_end: 10.144021 | silence_duration: 0.0594375\n[silencedetect @ 0x79b8940021c0] silence_start: 11.312417\n[silencedetect @ 0x79b8940021c0] silence_end: 11.563688 | silence_duration: 0.251271\n[silencedetect @ 0x79b8940021c0] silence_start: 11.960167\n[silencedetect @ 0x79b8940021c0] silence_end: 12.401813 | silence_duration: 0.441646\n[silencedetect @ 0x79b8940021c0] silence_start: 13.49225\n[silencedetect @ 0x79b8940021c0] silence_end: 13.69225 | silence_duration: 0.2\n[silencedetect @ 0x79b8940021c0] silence_start: 14.034167\n[silencedetect @ 0x79b8940021c0] silence_end: 14.067771 | silence_duration: 0.0336042\n[silencedetect @ 0x79b8940021c0] silence_start: 14.588417\n[silencedetect @ 0x79b8940021c0] silence_end: 14.626083 | silence_duration: 0.0376667\n[silencedetect @ 0x79b8940021c0] silence_start: 15.55\n[silencedetect @ 0x79b8940021c0] silence_end: 15.585708 | silence_duration: 0.0357083\n[silencedetect @ 0x79b8940021c0] silence_start: 15.607833\n[silencedetect @ 0x79b8940021c0] silence_end: 15.658396 | silence_duration: 0.0505625\n[silencedetect @ 0x79b8940021c0] silence_start: 15.681583\n[silencedetect @ 0x79b8940021c0] silence_end: 15.892062 | silence_duration: 0.210479\n[silencedetect @ 0x79b8940021c0] silence_start: 17.001958\n[silencedetect @ 0x79b8940021c0] silence_end: 17.414896 | silence_duration: 0.412938\n[silencedetect @ 0x79b8940021c0] silence_start: 17.808583\n[silencedetect @ 0x79b8940021c0] silence_end: 18.049396 | silence_duration: 0.240812\n[silencedetect @ 0x79b8940021c0] silence_start: 18.126958\n[silencedetect @ 0x79b8940021c0] silence_end: 18.170604 | silence_duration: 0.0436458\n[silencedetect @ 0x79b8940021c0] silence_start: 18.963854\n[silencedetect @ 0x79b8940021c0] silence_end: 19.204 | silence_duration: 0.240146\n[silencedetect @ 0x79b8940021c0] silence_start: 19.672667\n[silencedetect @ 0x79b8940021c0] silence_end: 19.702312 | silence_duration: 0.0296458\n[silencedetect @ 0x79b8940021c0] silence_start: 20.025083\n[silencedetect @ 0x79b8940021c0] silence_end: 20.400688 | silence_duration: 0.375604\n[silencedetect @ 0x79b8940021c0] silence_start: 20.842375\n[silencedetect @ 0x79b8940021c0] silence_end: 20.909396 | silence_duration: 0.0670208\n[silencedetect @ 0x79b8940021c0] silence_start: 21.74\n[silencedetect @ 0x79b8940021c0] silence_end: 21.800021 | silence_duration: 0.0600208\n[silencedetect @ 0x79b8940021c0] silence_start: 22.193646\n[silencedetect @ 0x79b8940021c0] silence_end: 22.293333 | silence_duration: 0.0996875\n[out#0/null @ 0x5ff1780f4640] video:0KiB audio:4180KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: unknown\nsize=N/A time=00:00:22.29 bitrate=N/A speed=653x elapsed=0:00:00.03\n"
+  }
+}

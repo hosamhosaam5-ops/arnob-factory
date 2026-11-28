@@ -2,12 +2,12 @@
 
 Source: GitHub Actions production Pipeline run #8, artifact ID 15257366397.
 Source artifact ZIP SHA-256: fd9f5ea62e2413dc5b1fdfb9a76c86cd15a965d707fdef69593c3f9c93336c6b
-Source artifact: 594 files; source ZIP CRC/integrity validation passed.
+Source artifact: 594 files; ZIP integrity validation passed.
 
-The hashes below are SHA-256 fingerprints from the verified Run #8 payload. This inventory is not a substitute for storing the corresponding binary files.
+The following media hashes are recorded from the verified Run #8 payload. The inventory is not a substitute for storing those binary files.
 
 ## Final MP4 (not persisted to this branch)
-- `alif-episode-v1.mp4` — 1,733,199 bytes — `2cc2e7b9254beadc908ca62fd1f64d44d0ad89ad2c4b70aead4ed8c8269a8a8d`
+- `alif-episode-v1.mp4` — 1,733,199 bytes — SHA-256 `2cc2e7b9254beadc908ca62fd1f64d44d0ad89ad2c4b70aead4ed8c8269a8a8d`
 
 ## Eight MP3 chunks (not persisted to this branch)
 | File | Bytes | SHA-256 |
@@ -28,14 +28,15 @@ The hashes below are SHA-256 fingerprints from the verified Run #8 payload. This
 | `preview/letter-card.png` | 172,154 | `3b350256a9f8fad52cbc7e8ea5fce1d1475d4a2e91b7f20c58d54605c9806972` |
 | `preview/word-rabbit.png` | 165,364 | `b45b16ec24459214f0ca8f02a532166cab9230ab3dce95ecd0d919890bb7d269` |
 
-## Reports and manifest (persisted)
-- `reports/manifest.json` — SHA-256 `4f43a2815606e2ae9066f29f855b37cbcf1d563cf2eba02c3e4b7894eb378d14`
-- `reports/silencedetect-report.json` — SHA-256 `5bfc09e9a9a358d675c4e74057cd79aec27f46f2d55374a0271e358e64ebf4a8`
-- `reports/timeline.json` — SHA-256 `720319b95bd9f3d53ebbb58aba76c9612a14490b6eca13b45d0999bd782ff6ea`
+## Persisted text artifacts
+- `reports/manifest.json` — SHA-256 is in `SHA256SUMS` (hash applies to the stored branch copy).
+- `reports/silencedetect-report.json` — SHA-256 is in `SHA256SUMS` (hash applies to the stored branch copy).
+- `reports/timeline.json` — SHA-256 is in `SHA256SUMS` (hash applies to the stored branch copy).
+- `reports/audio-mix-qa-summary.json` and `reports/video-qa-summary.json` — compact QA summaries derived from Run #8 evidence. The full original reports remain in the source Run #8 artifact.
 
-The original Run #8 Audio Mix QA and Video QA report checks were PASS. The final measured maximum silence was 0.445229 seconds against the unchanged 0.5-second limit, black-frame duration was 0, and A/V duration difference was 0.000667 seconds. The source reports remain in the Run #8 artifact; only the three text reports above were copied into this branch.
+Run #8 QA evidence: Audio Mix QA PASS; Video QA PASS; maximum measured silence 0.445229 seconds against the unchanged 0.5-second limit; black-frame duration 0; A/V duration difference 0.000667 seconds.
 
-The 535-frame ZIP is intentionally excluded, per the owner's instruction.
+The 535-frame ZIP is intentionally excluded.
 
 ## Transfer limitation
-The connected GitHub actions available in this session expose text blob/tree/ref operations, but no file-path or binary-upload operation. Therefore the MP4, MP3s and PNG previews were not written to this branch. The MP4 itself is 1,733,199 bytes (within GitHub's usual per-object size ceiling), but the connector does not expose a verified binary-transfer path for it. No claim is made that these binary assets are present here.
+The connected GitHub actions available in this session expose text blob/tree/ref operations, but no file-path or binary-upload operation. Therefore the MP4, MP3s and PNG previews were not written to this branch. The MP4 is 1,733,199 bytes and is below GitHub's usual per-object size ceiling, but the connector does not expose a verified binary-transfer path for it. No claim is made that these binary assets are present here.
