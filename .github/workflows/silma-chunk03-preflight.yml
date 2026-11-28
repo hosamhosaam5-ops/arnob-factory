@@ -35,8 +35,8 @@ jobs:
           echo "PREFLIGHT_UNIT_CHECKS=PASS"
       - name: Download exact run 6 and seed 4250 artifacts
         env:
-          GH_TOKEN: \${{ github.token }}
-          REPOSITORY: \${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           mkdir -p /tmp/run6 /tmp/calibration
           gh run download 46068424765 --repo "$REPOSITORY" --name letter-card-alif-46068424765 --dir /tmp/run6
@@ -199,7 +199,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: silma-chunk03-replacement-preflight-\${{ github.run_id }}
+          name: silma-chunk03-replacement-preflight-${{ github.run_id }}
           path: preflight/
           if-no-files-found: warn
           compression-level: 0
