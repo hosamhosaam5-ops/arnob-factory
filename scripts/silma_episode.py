@@ -278,8 +278,8 @@ def make_episode_mix(root: Path, completed: list[dict[str, Any]]) -> dict[str, A
         lines.append(f"file '{safe_path}'")
     concat_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    episode_wav = root / "letter-alif.wav"
-    pending_wav = root / "letter-alif.pending.wav"
+    episode_wav = root / f"{EPISODE_ID}.wav"
+    pending_wav = root / f"{EPISODE_ID}.pending.wav"
     run_checked([
         "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
         "-f", "concat", "-safe", "0", "-i", str(concat_file),
@@ -292,7 +292,7 @@ def make_episode_mix(root: Path, completed: list[dict[str, Any]]) -> dict[str, A
     wav_meta["sha256"] = sha256_file(episode_wav)
     wav_meta["path"] = episode_wav.name
 
-    episode_mp3 = root / "letter-alif.mp3"
+    episode_mp3 = root / f"{EPISODE_ID}.mp3"
     mp3_meta, encode_wall = make_mp3(episode_wav, episode_mp3, root)
     mp3_meta["path"] = episode_mp3.name
     return {"wav": wav_meta, "mp3": mp3_meta, "encodeWallSeconds": round(encode_wall, 6)}
@@ -420,10 +420,10 @@ def run_real(
     auto_seed: bool = False,
 ) -> int:
     active_chunks = select_chunks(CHUNKS, selected_chunk_id)
-    if auto_seed and len(active_chunks) > AUTO_SEED_MAX_CHUNKS_PER_RUN:
+    if len(active_chunks) > AUTO_SEED_MAX_CHUNKS_PER_RUN:
         raise RuntimeError(
-            f"Auto-seed run is limited to {AUTO_SEED_MAX_CHUNKS_PER_RUN} chunks "
-            f"({AUTO_SEED_ATTEMPTS} bounded trials each); split this episode at checkpoint boundaries"
+            f"This generation run is limited to {AUTO_SEED_MAX_CHUNKS_PER_RUN} selected chunks; "
+            "split larger episodes into sequential checkpoint batches"
         )
     manifest: dict[str, Any] = {
         "schemaVersion": 1,
@@ -965,16 +965,16 @@ def main() -> int:
     script_data = json.loads(script_path.read_text(encoding="utf-8"))
     if script_data.get("schemaVersion") != 1 or script_data.get("status") != "approved-script":
         raise RuntimeError("Script manifest must have schemaVersion=1 and status=approved-script")
-    if script_data.get("episodeId") != "letter-alif":
-        raise RuntimeError("Expected letter-alif episode manifest")
+    episode_id = script_data.get("episodeId")
+    if not isinstance(episode_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", episode_id):
+        raise RuntimeError("episodeId must be a lowercase slug")
     chunks = script_data.get("chunks")
-    if not isinstance(chunks, list) or len(chunks) != 8:
-        raise RuntimeError("Episode manifest must contain exactly eight chunks")
+    if not isinstance(chunks, list) or not 1 <= len(chunks) <= 16:
+        raise RuntimeError("Episode manifest must contain between one and sixteen chunks per generation run")
     ids: set[str] = set()
-    expected_speakers = ["pistachio", "hazelnut"] * 4
     for index, item in enumerate(chunks):
-        if not isinstance(item, dict) or item.get("speakerId") != expected_speakers[index]:
-            raise RuntimeError(f"Unexpected speaker or order in chunk {index + 1}")
+        if not isinstance(item, dict) or item.get("speakerId") not in PERSONAS:
+            raise RuntimeError(f"Unknown speaker in chunk {index + 1}")
         chunk_id = item.get("chunkId")
         source_text = item.get("text")
         if not isinstance(chunk_id, str) or not chunk_id.strip() or chunk_id in ids:
