@@ -58,6 +58,16 @@ class SilmaSeedTests(unittest.TestCase):
         self.assertEqual(silma.resolve_seed(3, None), 4245)
         self.assertEqual(silma.resolve_seed(3, 50123), 50123)
 
+    def test_auto_seed_sequence_is_exactly_five_candidates_from_4242_plus_index(self):
+        self.assertEqual(silma.auto_seed_candidates(3), [4245, 4246, 4247, 4248, 4249])
+        self.assertEqual(len(silma.auto_seed_candidates(3)), 5)
+
+    def test_auto_seed_run_chunk_cap_preserves_forty_minute_budget(self):
+        self.assertEqual(silma.AUTO_SEED_ATTEMPTS, 5)
+        self.assertEqual(silma.AUTO_SEED_MAX_CHUNKS_PER_RUN, 16)
+        self.assertEqual(silma.AUTO_SEED_ATTEMPTS * silma.AUTO_SEED_MAX_CHUNKS_PER_RUN * 23, 1840)
+        self.assertLess(1840, 40 * 60)
+
     def test_invalid_seed_is_rejected(self):
         for seed in (-1, 2**31):
             with self.assertRaises(ValueError):
