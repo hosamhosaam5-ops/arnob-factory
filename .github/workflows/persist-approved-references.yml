@@ -1,0 +1,77 @@
+name: Persist approved SILMA reference assets
+
+on:
+  push:
+    branches: [feat/unified-episode-pipeline]
+    paths:
+      - .github/workflows/persist-approved-references.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  persist:
+    if: github.ref == 'refs/heads/feat/unified-episode-pipeline'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: \${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Download calibration artifact by exact ID
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 15253057317
+          run-id: 46119257810
+          github-token: \${{ secrets.GITHUB_TOKEN }}
+          repository: \${{ github.repository }}
+          path: calibration
+
+      - name: Verify approved PCM and persist both references
+        env:
+          GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          SRC="calibration/artifacts/seed-trials/references"
+          test -s "$SRC/pistachio-reference.wav"
+          test -s "$SRC/hazelnut-reference.wav"
+          python - <<'PY'
+          import hashlib, wave
+          from pathlib import Path
+          root=Path("calibration/artifacts/seed-trials/references")
+          expected={
+            "pistachio-reference.wav":{
+              "file":"f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+              "pcm":"724b5f6020aef1f87d0942d15cb2f6aa78a70fbbfbf86d2800cd2b99972a49cb",
+            },
+            "hazelnut-reference.wav":{
+              "file":"d8bc7d163a0ece3c4b885619473ddf8ac2cd4894672227aaa5d141bd82108e5d",
+              "pcm":"225479707276b3947c1e453da4074798b968183a2a969ceae0869ca69e14e9da",
+            },
+          }
+          for name, hashes in expected.items():
+              path=root/name
+              file_hash=hashlib.sha256(path.read_bytes()).hexdigest()
+              with wave.open(str(path),"rb") as wav:
+                  assert wav.getnchannels()==1 and wav.getframerate()==24000 and wav.getsampwidth()==2
+                  pcm=wav.readframes(wav.getnframes())
+              pcm_hash=hashlib.sha256(pcm).hexdigest()
+              if file_hash != hashes["file"]:
+                  raise SystemExit(f"REFERENCE_FILE_SHA256_MISMATCH {name} expected={hashes['file']} actual={file_hash}")
+              if pcm_hash != hashes["pcm"]:
+                  raise SystemExit(f"REFERENCE_PCM_SHA256_MISMATCH {name} expected={hashes['pcm']} actual={pcm_hash}")
+              print(f"REFERENCE_VERIFIED {name} file={file_hash} pcm={pcm_hash}")
+          PY
+          mkdir -p assets/references
+          cp "$SRC/pistachio-reference.wav" assets/references/pistachio-reference.wav
+          cp "$SRC/hazelnut-reference.wav" assets/references/hazelnut-reference.wav
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/references/*.wav
+          git diff --cached --check
+          git commit -m "chore: pin approved SILMA voice references"
+          git push origin HEAD:refs/heads/feat/unified-episode-pipeline
