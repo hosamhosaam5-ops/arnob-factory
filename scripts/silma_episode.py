@@ -417,8 +417,14 @@ def run_real(
     started: float,
     selected_chunk_id: str | None = None,
     seed_override: int | None = None,
+    auto_seed: bool = False,
 ) -> int:
     active_chunks = select_chunks(CHUNKS, selected_chunk_id)
+    if auto_seed and len(active_chunks) > AUTO_SEED_MAX_CHUNKS_PER_RUN:
+        raise RuntimeError(
+            f"Auto-seed run is limited to {AUTO_SEED_MAX_CHUNKS_PER_RUN} chunks "
+            f"({AUTO_SEED_ATTEMPTS} bounded trials each); split this episode at checkpoint boundaries"
+        )
     manifest: dict[str, Any] = {
         "schemaVersion": 1,
         "episodeId": EPISODE_ID,
@@ -443,17 +449,33 @@ def run_real(
         "totalChunksInScript": len(CHUNKS),
         "selectedChunkId": selected_chunk_id,
         "seedOverride": seed_override,
+        "autoSeed": auto_seed,
+        "autoSeedPolicy": {
+            "attemptsPerChunk": AUTO_SEED_ATTEMPTS,
+            "maximumChunksPerRun": AUTO_SEED_MAX_CHUNKS_PER_RUN,
+            "maximumEstimatedInferenceCalls": AUTO_SEED_ATTEMPTS * AUTO_SEED_MAX_CHUNKS_PER_RUN,
+            "maximumSilenceSecondsExclusive": 0.45,
+            "maximumPeakAmplitudeExclusive": 0.95,
+            "durationToleranceSeconds": 0.30,
+        },
         "completedChunks": [],
         "weights": {},
     }
     save_progress(root, manifest)
 
     try:
+        guard_seed = seed_override
+        if auto_seed and selected_chunk_id is not None:
+            selected_index = next(
+                index for index, item in enumerate(CHUNKS, start=1)
+                if item["chunkId"] == selected_chunk_id
+            )
+            guard_seed = resolve_seed(selected_index, None)
         manifest["runPolicy"]["request"] = authorize_run_event(
             os.environ.get("GITHUB_EVENT_NAME", ""),
             os.environ.get("GITHUB_RUN_ATTEMPT", ""),
             selected_chunk_id,
-            seed_override,
+            guard_seed,
         )
 
         import numpy as np
@@ -931,6 +953,11 @@ def main() -> int:
         type=int,
         help="Explicit deterministic SILMA seed; requires --only-chunk-id.",
     )
+    parser.add_argument(
+        "--auto-seed",
+        action="store_true",
+        help="Try exactly five deterministic seeds per chunk and keep the first candidate passing every strict gate.",
+    )
     args = parser.parse_args()
 
     global CHUNKS, EPISODE_ID, SCRIPT_MANIFEST_SHA256
@@ -957,13 +984,17 @@ def main() -> int:
         ids.add(chunk_id)
     if args.seed is not None and args.only_chunk_id is None:
         raise RuntimeError("--seed requires --only-chunk-id")
-    if args.only_chunk_id is not None and args.seed is None:
-        raise RuntimeError("--only-chunk-id requires an explicit --seed")
+    if args.seed is not None and args.auto_seed:
+        raise RuntimeError("--seed and --auto-seed are mutually exclusive")
+    if args.only_chunk_id is not None and args.seed is None and not args.auto_seed:
+        raise RuntimeError("--only-chunk-id requires --seed or --auto-seed")
     if args.seed is not None and not 0 <= args.seed <= 2**31 - 1:
         raise RuntimeError("--seed must be between 0 and 2147483647")
     select_chunks(chunks, args.only_chunk_id)
     if args.dry_run and args.only_chunk_id is not None:
         raise RuntimeError("--dry-run cannot be combined with --only-chunk-id")
+    if args.dry_run and args.auto_seed:
+        raise RuntimeError("--dry-run cannot be combined with --auto-seed")
 
     CHUNKS = chunks
     EPISODE_ID = script_data["episodeId"]
@@ -984,6 +1015,7 @@ def main() -> int:
         started,
         args.only_chunk_id,
         args.seed,
+        args.auto_seed,
     )
 
 
