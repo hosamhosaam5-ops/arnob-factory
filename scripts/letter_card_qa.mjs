@@ -22,6 +22,25 @@ const videoReportPath=path.join(renderDir,'video-qa-report.json');
 const combinedReportPath=path.join(renderDir,'audio-video-qa-report.json');
 
 function ensure(value,message){if(!value)throw new Error(message);}
+
+function printFailedChecks(phase, result) {
+ const checks = Array.isArray(result?.checks) ? result.checks : [];
+ const failed = checks.filter(check => check?.status === 'fail');
+ console.error(JSON.stringify({
+  phase,
+  status: result?.status ?? 'fail',
+  failedCheckCount: failed.length,
+  failedChecks: failed.map(check => ({
+   name: check.name,
+   value: check.value ?? null,
+   limit: check.limit ?? null,
+   unit: check.unit ?? null,
+   details: check.details ?? null
+  })),
+  allChecks: checks,
+  limits: result?.limits ?? null
+ }, null, 2));
+}
 async function sha(file){return createHash('sha256').update(await readFile(file)).digest('hex');}
 async function requireFile(file,label){const info=await stat(file);ensure(info.isFile()&&info.size>0,label+' is missing or empty');return info;}
 function run(command,args,timeoutMs=180000){
@@ -54,6 +73,7 @@ async function audioMix(){
  await requireFile(voiceTrack,'Rendered voice track');
  await run('ffmpeg',['-hide_banner','-nostdin','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t','1','-ar','48000','-ac','2','-c:a','pcm_s16le',silentBed]);
  const audioMix=await mixAudioForVideo({videoPath:rawVideo,voiceoverPath:voiceTrack,musicPath:silentBed,outputPath:mixedWav,soundEffects:[]});
+ if(audioMix.status!=='pass') printFailedChecks('audio-mix',audioMix);
  ensure(audioMix.status==='pass','Audio Mix QA failed');
  await run('ffmpeg',['-hide_banner','-nostdin','-loglevel','error','-y','-i',rawVideo,'-i',mixedWav,
   '-map','0:v:0','-map','1:a:0','-c:v','copy','-c:a','aac','-b:a','128k','-ar','48000','-ac','2',
@@ -75,6 +95,7 @@ async function videoQa(){
  const sources=await verifySources();
  const sourceMediaUnmodified=audio.sourceMediaFingerprints.every(old=>sources.files.some(now=>now.path===old.path&&now.sha256===old.sha256));
  const status=videoQa.status==='pass'&&sourceMediaUnmodified?'pass':'fail';
+ if(status!=='pass') printFailedChecks('video-qa',videoQa);
  const finalInfo=await requireFile(finalVideo,'Final MP4');
  const report={status,episodeScriptSha256:sources.manifest.episodeScriptSha256,
   sourceManifestSha256:sources.manifestSha256,sourceMediaUnmodified,
