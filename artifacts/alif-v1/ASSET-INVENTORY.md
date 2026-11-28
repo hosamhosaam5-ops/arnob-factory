@@ -4,12 +4,12 @@ Source: GitHub Actions production Pipeline run #8, artifact ID 15257366397.
 Source artifact ZIP SHA-256: fd9f5ea62e2413dc5b1fdfb9a76c86cd15a965d707fdef69593c3f9c93336c6b
 Source artifact: 594 files; ZIP integrity validation passed.
 
-The following media hashes are recorded from the verified Run #8 payload. The inventory is not a substitute for storing those binary files.
+The following media hashes are recorded from the verified Run #8 payload. The MP4, eight MP3 files and three preview PNGs are now stored on this branch.
 
-## Final MP4 (not persisted to this branch)
+## Final MP4 (persisted to this branch)
 - `alif-episode-v1.mp4` — 1,733,199 bytes — SHA-256 `2cc2e7b9254beadc908ca62fd1f64d44d0ad89ad2c4b70aead4ed8c8269a8a8d`
 
-## Eight MP3 chunks (not persisted to this branch)
+## Eight MP3 chunks (persisted to this branch)
 | File | Bytes | SHA-256 |
 |---|---:|---|
 | `audio/chunk-01.mp3` | 34,988 | `fb0355425e3837d7e75ac1a129eea526f1e3b1e6a8a25e071430d3685c031179` |
@@ -21,7 +21,7 @@ The following media hashes are recorded from the verified Run #8 payload. The in
 | `audio/chunk-07.mp3` | 54,956 | `00b6ab3345b40c1bf35550720abe2fcba9b1fb9494ee05e06409cac552130aa0` |
 | `audio/chunk-08.mp3` | 50,732 | `cc727ac0fb6f604d830522ccd4590be761d8ca16fff190c3636508bad8f3a3cc` |
 
-## Three previews (not persisted to this branch)
+## Three previews (persisted to this branch)
 | File | Bytes | SHA-256 |
 |---|---:|---|
 | `preview/final-scene.png` | 170,439 | `742aa3d752a59929f631ddc8638bb8f9cd270ef682c2cfafb90d55186512d666` |
@@ -36,7 +36,7 @@ The following media hashes are recorded from the verified Run #8 payload. The in
 
 Run #8 QA evidence: Audio Mix QA PASS; Video QA PASS; maximum measured silence 0.445229 seconds against the unchanged 0.5-second limit; black-frame duration 0; A/V duration difference 0.000667 seconds.
 
-The 535-frame ZIP is intentionally excluded.
+The 535-frame ZIP is retained as one asset on GitHub Release alif-episode-v1; it is not mirrored to this branch.
 
-## Transfer limitation
-The connected GitHub actions available in this session expose text blob/tree/ref operations, but no file-path or binary-upload operation. Therefore the MP4, MP3s and PNG previews were not written to this branch. The MP4 is 1,733,199 bytes and is below GitHub's usual per-object size ceiling, but the connector does not expose a verified binary-transfer path for it. No claim is made that these binary assets are present here.
+## Transfer outcome
+The temporary GitHub Actions workflow downloaded the original Run #8 artifact, verified the supplied SHA-256 values, and pushed the MP4, eight MP3 chunks and three preview PNGs to this branch without rewriting its history. The GitHub Release contains the additional QA reports, silence/timeline/manifest files, SHA256SUMS and the 535-frame ZIP.
