@@ -1,0 +1,47 @@
+{
+  "source": "edge-trimmed WAV durations measured by ffprobe after chunk-03 replacement",
+  "interChunkPauseSeconds": 0.2,
+  "durationSeconds": 22.26425,
+  "segments": [
+    {
+      "chunkId": "chunk-01",
+      "startSeconds": 0.0,
+      "durationSeconds": 2.099917
+    },
+    {
+      "chunkId": "chunk-02",
+      "startSeconds": 2.299917,
+      "durationSeconds": 3.566375
+    },
+    {
+      "chunkId": "chunk-03",
+      "startSeconds": 6.066292,
+      "durationSeconds": 2.418625
+    },
+    {
+      "chunkId": "chunk-04",
+      "startSeconds": 8.684917,
+      "durationSeconds": 2.673833
+    },
+    {
+      "chunkId": "chunk-05",
+      "startSeconds": 11.55875,
+      "durationSeconds": 1.928542
+    },
+    {
+      "chunkId": "chunk-06",
+      "startSeconds": 13.687292,
+      "durationSeconds": 1.999833
+    },
+    {
+      "chunkId": "chunk-07",
+      "startSeconds": 15.887125,
+      "durationSeconds": 3.111917
+    },
+    {
+      "chunkId": "chunk-08",
+      "startSeconds": 19.199042,
+      "durationSeconds": 3.065208
+    }
+  ]
+}
