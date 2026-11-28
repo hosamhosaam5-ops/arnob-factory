@@ -1,0 +1,2 @@
+# SILMA TTS runtime pin. The workflow installs this package with --no-deps and pins CPU-only Torch separately.
+silma-tts==1.0.5
