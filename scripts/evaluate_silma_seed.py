@@ -50,7 +50,10 @@ def duration_window(
     letter_count = len(re.findall(r"[\u0600-\u06ffA-Za-z]", source_text))
     if letter_count < 1:
         raise ValueError("source text must contain at least one letter")
-    return max(0.5, letter_count * 0.015), max(0.8, letter_count * 0.045), None
+    # Arabic TTS duration estimate: 0.04–0.12 seconds per written letter.
+    # Broad bounds accommodate pauses and speaking-rate variation while rejecting
+    # clearly truncated or abnormally elongated candidates.
+    return max(0.8, letter_count * 0.04), max(1.0, letter_count * 0.12), None
 
 
 def analyze_candidate(
