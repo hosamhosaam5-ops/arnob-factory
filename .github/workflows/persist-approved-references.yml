@@ -42,7 +42,7 @@ jobs:
           python - <<'PY'
           import hashlib, wave
           from pathlib import Path
-          root=Path("calibration/artifacts/seed-trials/references")
+          root=Path("calibration/silma-chunk-03-calibration-seed-trials-46119257810/artifacts/seed-trials/references")
           expected={
             "pistachio-reference.wav":{
               "file":"f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
