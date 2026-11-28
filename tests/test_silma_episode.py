@@ -192,6 +192,29 @@ class SilmaSeedTests(unittest.TestCase):
             candidate_item["settings"]["seed"] = 50123
             candidate_item["wav"]["sha256"] = digest(new_wav)
             candidate_item["mp3"]["sha256"] = digest(new_mp3)
+            candidate_item["reference"].update({
+                "sha256": "f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+                "approvalId": "pistachio-ar-f3-method-a-v2",
+                "approvalName": "مرجع معتمد جديد",
+                "canonicalSha256": "f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+                "pcmSha256": "724b5f6020aef1f87d0942d15cb2f6aa78a70fbbfbf86d2800cd2b99972a49cb",
+                "legacyReferenceSha256": "31bcd745b476ea64d5a03ee6b8bf285de5ae822537f27c14902f2043f5ce0836",
+                "legacyReferenceReproducible": False,
+                "approvalNote": "بصمة Run #6 القديمة لا يمكن إعادة إنتاجها",
+            })
+            approval_path = root / "pistachio-reference-approval.json"
+            approval_path.write_text(json.dumps({
+                "approvalId": "pistachio-ar-f3-method-a-v2",
+                "name": "مرجع معتمد جديد",
+                "persona": "pistachio",
+                "voice": "ar+f3",
+                "sha256": "f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+                "pcmSha256": "724b5f6020aef1f87d0942d15cb2f6aa78a70fbbfbf86d2800cd2b99972a49cb",
+                "supersedes": {
+                    "sha256": "31bcd745b476ea64d5a03ee6b8bf285de5ae822537f27c14902f2043f5ce0836",
+                    "reproducible": False,
+                },
+            }), encoding="utf-8")
             candidate_manifest = {
                 "episodeId": "letter-alif",
                 "status": "complete",
@@ -211,12 +234,14 @@ class SilmaSeedTests(unittest.TestCase):
                     "mp3": {"sha256": "rebuilt-episode-mp3"},
                 },
             ):
-                result = merge.replace_chunk(base_dir, candidate_dir, "chunk-03")
+                result = merge.replace_chunk(base_dir, candidate_dir, "chunk-03", approval_path)
             updated = json.loads((base_dir / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(result["preservedChunkCount"], 7)
             self.assertEqual(result["preservedMediaCount"], 14)
             self.assertEqual(updated["replacementHistory"][0]["seed"], 50123)
             self.assertEqual(updated["completedChunks"][2]["settings"]["seed"], 50123)
+            self.assertEqual(updated["completedChunks"][2]["reference"]["approvalId"], "pistachio-ar-f3-method-a-v2")
+            self.assertEqual(updated["replacementHistory"][0]["referenceTransition"]["pcmSha256"], "724b5f6020aef1f87d0942d15cb2f6aa78a70fbbfbf86d2800cd2b99972a49cb")
             for index in range(8):
                 if index == 2:
                     self.assertEqual(updated["completedChunks"][index]["wav"]["sha256"], digest(new_wav))

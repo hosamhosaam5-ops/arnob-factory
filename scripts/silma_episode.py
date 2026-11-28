@@ -487,6 +487,14 @@ def run_real(
                 "path": settings["reference"], "sha256": entry["sha256"],
                 "sizeBytes": ref_path.stat().st_size, "sampleRate": rate,
                 "channels": int(audio.shape[1]),
+                **{
+                    key: entry[key]
+                    for key in (
+                        "approvalId", "approvalName", "canonicalSha256", "pcmSha256",
+                        "legacyReferenceSha256", "legacyReferenceReproducible", "approvalNote",
+                    )
+                    if key in entry
+                },
             }
         manifest["references"] = reference_details
         manifest["runtime"] = versions

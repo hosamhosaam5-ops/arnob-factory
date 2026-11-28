@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "approvalId": "pistachio-ar-f3-method-a-v2",
+  "name": "مرجع معتمد جديد",
+  "persona": "pistachio",
+  "engine": "eSpeak NG",
+  "engineVersion": "1.52.0",
+  "referenceText": "مَرْحَبًا، هَذَا صَوْتٌ تَجْرِيبِيٌّ لِشَخْصِيَّةٍ كَرْتُونِيَّةٍ.",
+  "voice": "ar+f3",
+  "speed": 160,
+  "pitch": 68,
+  "sampleRate": 24000,
+  "channels": 1,
+  "samples": 115637,
+  "durationSeconds": 4.818208,
+  "sizeBytes": 231352,
+  "sha256": "f5318de003d2a9d41852478cddcf9439be976132f1d420aab72a10c78c97389f",
+  "pcmSha256": "724b5f6020aef1f87d0942d15cb2f6aa78a70fbbfbf86d2800cd2b99972a49cb",
+  "provenance": {
+    "workflowRunId": 46076296545,
+    "artifactId": 15234961303,
+    "originalSourceSha256": "aab1d474ebfc1b66d45f5fef3df3f14a200e42bbb54fbaa27a571ed2989a3c75",
+    "normalizedFromSampleRate": 22050,
+    "normalizedToSampleRate": 24000
+  },
+  "supersedes": {
+    "workflowRunNumber": 6,
+    "sha256": "31bcd745b476ea64d5a03ee6b8bf285de5ae822537f27c14902f2043f5ce0836",
+    "reproducible": false,
+    "note": "بصمة Run #6 القديمة لا يمكن إعادة إنتاجها؛ اعتُمد هذا المرجع الجديد كبصمة صوتية معلنة، مع تثبيت PCM."
+  }
+}

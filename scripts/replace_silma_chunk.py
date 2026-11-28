@@ -189,7 +189,12 @@ def write_measurements(path: Path, completed: list[dict[str, Any]]) -> None:
     temporary.replace(path)
 
 
-def replace_chunk(base_dir: Path, candidate_dir: Path, chunk_id: str) -> dict[str, Any]:
+def replace_chunk(
+    base_dir: Path,
+    candidate_dir: Path,
+    chunk_id: str,
+    reference_approval_manifest: Path | None = None,
+) -> dict[str, Any]:
     started = time.perf_counter()
     base_path = base_dir / "manifest.json"
     candidate_path = candidate_dir / "manifest.json"
@@ -241,11 +246,26 @@ def replace_chunk(base_dir: Path, candidate_dir: Path, chunk_id: str) -> dict[st
     ):
         if candidate_item.get("settings", {}).get(key) != old_item.get("settings", {}).get(key):
             raise ValueError(f"Replacement setting mismatch: {key}")
-    if (
-        candidate_item.get("reference", {}).get("sha256")
-        != old_item.get("reference", {}).get("sha256")
-    ):
-        raise ValueError("Replacement does not use the identical reference audio SHA-256")
+    old_reference = old_item.get("reference", {})
+    candidate_reference = candidate_item.get("reference", {})
+    reference_sha_unchanged = candidate_reference.get("sha256") == old_reference.get("sha256")
+    approved_reference_change = False
+    if not reference_sha_unchanged:
+        if reference_approval_manifest is None or chunk_id != "chunk-03" or old_item.get("speakerId") != "pistachio":
+            raise ValueError("Replacement does not use the identical reference audio SHA-256")
+        approval = json.loads(reference_approval_manifest.read_text(encoding="utf-8"))
+        approved_reference_change = (
+            approval.get("approvalId") == candidate_reference.get("approvalId")
+            and approval.get("name") == candidate_reference.get("approvalName")
+            and approval.get("sha256") == candidate_reference.get("canonicalSha256")
+            and approval.get("pcmSha256") == candidate_reference.get("pcmSha256")
+            and approval.get("persona") == "pistachio"
+            and approval.get("voice") == candidate_item.get("settings", {}).get("voice")
+            and approval.get("supersedes", {}).get("sha256") == candidate_reference.get("legacyReferenceSha256")
+            and approval.get("supersedes", {}).get("reproducible") is False
+        )
+        if not approved_reference_change:
+            raise ValueError("Replacement reference differs and does not match the declared approved Pistachio reference")
     seed = candidate_item.get("settings", {}).get("seed")
     if not isinstance(seed, int) or not 0 <= seed <= 2**31 - 1:
         raise ValueError("Candidate manifest does not contain a valid explicit seed")
@@ -280,7 +300,8 @@ def replace_chunk(base_dir: Path, candidate_dir: Path, chunk_id: str) -> dict[st
         metadata["sha256"] = sha256_file(destination)
         new_item[key] = metadata
 
-    new_item["reference"] = deepcopy(old_item["reference"])
+    # Keep the replacement reference record so the reference transition is auditable.
+    new_item["reference"] = deepcopy(candidate_reference)
     base_items[target_index] = new_item
 
     for preserved_id, expected in preserved_items.items():
@@ -304,7 +325,14 @@ def replace_chunk(base_dir: Path, candidate_dir: Path, chunk_id: str) -> dict[st
                 "wavSha256": new_item["wav"]["sha256"],
                 "mp3Sha256": new_item["mp3"]["sha256"],
             },
-            "referenceSha256": old_item["reference"]["sha256"],
+            "referenceSha256": new_item["reference"]["sha256"],
+            "referenceTransition": ({
+                "fromSha256": old_reference.get("sha256"),
+                "toSha256": new_item["reference"].get("sha256"),
+                "approvalId": new_item["reference"].get("approvalId"),
+                "pcmSha256": new_item["reference"].get("pcmSha256"),
+                "note": new_item["reference"].get("approvalNote"),
+            } if approved_reference_change else None),
             "episodeScriptSha256": base["episodeScriptSha256"],
         }
     )
@@ -358,11 +386,13 @@ def main() -> int:
     parser.add_argument("--base-dir", required=True)
     parser.add_argument("--candidate-dir", required=True)
     parser.add_argument("--chunk-id", required=True)
+    parser.add_argument("--reference-approval-manifest")
     args = parser.parse_args()
     result = replace_chunk(
         Path(args.base_dir),
         Path(args.candidate_dir),
         args.chunk_id,
+        Path(args.reference_approval_manifest) if args.reference_approval_manifest else None,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
