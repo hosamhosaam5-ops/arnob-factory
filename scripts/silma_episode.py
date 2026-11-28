@@ -11,6 +11,8 @@ import json
 import math
 import os
 import platform
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -43,6 +45,8 @@ PERSONAS = {
 CHUNKS: list[dict[str, str]] = []
 EPISODE_ID = "letter-alif"
 SCRIPT_MANIFEST_SHA256 = ""
+AUTO_SEED_ATTEMPTS = 5
+AUTO_SEED_MAX_CHUNKS_PER_RUN = 16
 
 
 def select_chunks(
@@ -121,6 +125,24 @@ def authorize_run_event(
         "automaticRetry": False,
     }
 
+
+
+
+def auto_seed_candidates(index: int) -> list[int]:
+    """Return the five explicitly approved candidate seeds for a one-based chunk index."""
+    base = resolve_seed(index, None)
+    return [base + offset for offset in range(AUTO_SEED_ATTEMPTS)]
+
+
+def pcm_sha256(path: Path) -> tuple[str, int, int, int, int]:
+    """Hash uncompressed PCM frame bytes only; RIFF metadata is intentionally excluded."""
+    with wave.open(str(path), "rb") as stream:
+        channels = stream.getnchannels()
+        sample_rate = stream.getframerate()
+        sample_width = stream.getsampwidth()
+        samples = stream.getnframes()
+        pcm = stream.readframes(samples)
+    return hashlib.sha256(pcm).hexdigest(), channels, sample_rate, sample_width, samples
 
 
 def sha256_file(path: Path) -> str:
@@ -257,8 +279,8 @@ def make_episode_mix(root: Path, completed: list[dict[str, Any]]) -> dict[str, A
         lines.append(f"file '{safe_path}'")
     concat_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    episode_wav = root / "letter-alif.wav"
-    pending_wav = root / "letter-alif.pending.wav"
+    episode_wav = root / f"{EPISODE_ID}.wav"
+    pending_wav = root / f"{EPISODE_ID}.pending.wav"
     run_checked([
         "ffmpeg", "-hide_banner", "-nostdin", "-loglevel", "error", "-y",
         "-f", "concat", "-safe", "0", "-i", str(concat_file),
@@ -271,7 +293,7 @@ def make_episode_mix(root: Path, completed: list[dict[str, Any]]) -> dict[str, A
     wav_meta["sha256"] = sha256_file(episode_wav)
     wav_meta["path"] = episode_wav.name
 
-    episode_mp3 = root / "letter-alif.mp3"
+    episode_mp3 = root / f"{EPISODE_ID}.mp3"
     mp3_meta, encode_wall = make_mp3(episode_wav, episode_mp3, root)
     mp3_meta["path"] = episode_mp3.name
     return {"wav": wav_meta, "mp3": mp3_meta, "encodeWallSeconds": round(encode_wall, 6)}
@@ -396,8 +418,14 @@ def run_real(
     started: float,
     selected_chunk_id: str | None = None,
     seed_override: int | None = None,
+    auto_seed: bool = False,
 ) -> int:
     active_chunks = select_chunks(CHUNKS, selected_chunk_id)
+    if len(active_chunks) > AUTO_SEED_MAX_CHUNKS_PER_RUN:
+        raise RuntimeError(
+            f"This generation run is limited to {AUTO_SEED_MAX_CHUNKS_PER_RUN} selected chunks; "
+            "split larger episodes into sequential checkpoint batches"
+        )
     manifest: dict[str, Any] = {
         "schemaVersion": 1,
         "episodeId": EPISODE_ID,
@@ -422,17 +450,33 @@ def run_real(
         "totalChunksInScript": len(CHUNKS),
         "selectedChunkId": selected_chunk_id,
         "seedOverride": seed_override,
+        "autoSeed": auto_seed,
+        "autoSeedPolicy": {
+            "attemptsPerChunk": AUTO_SEED_ATTEMPTS,
+            "maximumChunksPerRun": AUTO_SEED_MAX_CHUNKS_PER_RUN,
+            "maximumEstimatedInferenceCalls": AUTO_SEED_ATTEMPTS * AUTO_SEED_MAX_CHUNKS_PER_RUN,
+            "maximumSilenceSecondsExclusive": 0.45,
+            "maximumPeakAmplitudeExclusive": 0.95,
+            "durationToleranceSeconds": 0.30,
+        },
         "completedChunks": [],
         "weights": {},
     }
     save_progress(root, manifest)
 
     try:
+        guard_seed = seed_override
+        if auto_seed and selected_chunk_id is not None:
+            selected_index = next(
+                index for index, item in enumerate(CHUNKS, start=1)
+                if item["chunkId"] == selected_chunk_id
+            )
+            guard_seed = resolve_seed(selected_index, None)
         manifest["runPolicy"]["request"] = authorize_run_event(
             os.environ.get("GITHUB_EVENT_NAME", ""),
             os.environ.get("GITHUB_RUN_ATTEMPT", ""),
             selected_chunk_id,
-            seed_override,
+            guard_seed,
         )
 
         import numpy as np
@@ -471,10 +515,23 @@ def run_real(
         for persona, settings in PERSONAS.items():
             entry = ref_manifest.get("files", {}).get(persona, {})
             ref_path = references_dir / settings["reference"]
-            if not ref_path.is_file() or sha256_file(ref_path) != entry.get("sha256"):
-                raise RuntimeError(f"Method A reference SHA-256 mismatch for {persona}")
-            audio, rate = sf.read(ref_path, dtype="float32", always_2d=True)
-            if rate != 24000 or audio.shape[1] != 1 or audio.size == 0 or not np.isfinite(audio).all():
+            if not ref_path.is_file():
+                raise RuntimeError(f"Missing committed Method A PCM reference for {persona}")
+            actual_pcm, channels, rate, sample_width, samples = pcm_sha256(ref_path)
+            if (channels, rate, sample_width) != (1, 24000, 2):
+                raise RuntimeError(f"Method A PCM container mismatch for {persona}")
+            if actual_pcm != entry.get("pcmSha256"):
+                raise RuntimeError(
+                    f"REFERENCE_PCM_SHA256_MISMATCH {persona} "
+                    f"expected={entry.get('pcmSha256')} actual={actual_pcm}"
+                )
+            if samples != entry.get("samples"):
+                raise RuntimeError(
+                    f"REFERENCE_SAMPLE_COUNT_MISMATCH {persona} "
+                    f"expected={entry.get('samples')} actual={samples}"
+                )
+            audio, decoded_rate = sf.read(ref_path, dtype="float32", always_2d=True)
+            if decoded_rate != 24000 or audio.shape[1] != 1 or audio.size == 0 or not np.isfinite(audio).all():
                 raise RuntimeError(f"Method A reference audio failed decode preflight for {persona}")
             declared = ref_manifest.get("personas", {}).get(persona, {})
             if (
@@ -484,14 +541,21 @@ def run_real(
             ):
                 raise RuntimeError(f"Method A voice settings mismatch for {persona}")
             reference_details[persona] = {
-                "path": settings["reference"], "sha256": entry["sha256"],
-                "sizeBytes": ref_path.stat().st_size, "sampleRate": rate,
-                "channels": int(audio.shape[1]),
+                "path": settings["reference"],
+                "sha256": sha256_file(ref_path),
+                "pcmSha256": actual_pcm,
+                "verification": "pcm-sha256-only",
+                "sizeBytes": ref_path.stat().st_size,
+                "sampleRate": rate,
+                "channels": channels,
+                "sampleWidthBytes": sample_width,
+                "samples": samples,
                 **{
                     key: entry[key]
                     for key in (
-                        "approvalId", "approvalName", "canonicalSha256", "pcmSha256",
-                        "legacyReferenceSha256", "legacyReferenceReproducible", "approvalNote",
+                        "approvalId", "approvalName", "canonicalSha256",
+                        "legacyReferenceSha256", "legacyReferenceReproducible",
+                        "approvalNote",
                     )
                     if key in entry
                 },
@@ -569,53 +633,174 @@ def run_real(
             reference_path = references_dir / voice["reference"]
             stem = f"{index:02d}-{speaker}"
             final_wav = root / "chunks" / f"{stem}.wav"
-            pending_wav = root / "chunks" / f"{stem}.pending.wav"
             final_mp3 = root / "chunks" / f"{stem}.mp3"
-            pending_wav.parent.mkdir(parents=True, exist_ok=True)
-            if pending_wav.exists():
-                pending_wav.unlink()
+            final_wav.parent.mkdir(parents=True, exist_ok=True)
 
-            cpu_started = time.process_time()
-            wall_started = time.perf_counter()
-            manifest["modelInferenceInvoked"] = True
-            save_progress(root, manifest)
-            inference_seed = resolve_seed(index, seed_override)
-            tts.infer(
-                ref_file=str(reference_path),
-                ref_text=ARABIC_REFERENCE_TEXT,
-                gen_text=chunk["text"],
-                file_wave=str(pending_wav),
-                seed=inference_seed,
-                speed=1.0,
-                nfe_step=NFE_STEP,
-                normalize_numbers=False,
-                force_tashkeel=False,
-            )
-            cpu_seconds = time.process_time() - cpu_started
-            wall_seconds = time.perf_counter() - wall_started
-            wav_meta = validate_wav(pending_wav, sf)
-            os.replace(pending_wav, final_wav)
+            trial_records: list[dict[str, Any]] = []
+            successful_durations: list[float] = []
+            if auto_seed:
+                candidate_seeds = auto_seed_candidates(index)
+            else:
+                candidate_seeds = [resolve_seed(index, seed_override)]
+
+            chosen: dict[str, Any] | None = None
+            for attempt_number, inference_seed in enumerate(candidate_seeds, start=1):
+                trial_dir = root / "auto-seed-trials" / chunk["chunkId"]
+                trial_dir.mkdir(parents=True, exist_ok=True)
+                candidate_wav = trial_dir / f"seed-{inference_seed}.wav"
+                candidate_mp3 = trial_dir / f"seed-{inference_seed}.mp3"
+                pending_wav = trial_dir / f"seed-{inference_seed}.pending.wav"
+                if pending_wav.exists():
+                    pending_wav.unlink()
+
+                cpu_started = time.process_time()
+                wall_started = time.perf_counter()
+                manifest["modelInferenceInvoked"] = True
+                save_progress(root, manifest)
+                tts.infer(
+                    ref_file=str(reference_path),
+                    ref_text=ARABIC_REFERENCE_TEXT,
+                    gen_text=chunk["text"],
+                    file_wave=str(pending_wav),
+                    seed=inference_seed,
+                    speed=1.0,
+                    nfe_step=NFE_STEP,
+                    normalize_numbers=False,
+                    force_tashkeel=False,
+                )
+                cpu_seconds = time.process_time() - cpu_started
+                wall_seconds = time.perf_counter() - wall_started
+                wav_meta = validate_wav(pending_wav, sf)
+                os.replace(pending_wav, candidate_wav)
+                wav_meta["path"] = str(candidate_wav.relative_to(root))
+                mp3_meta, encode_wall = make_mp3(candidate_wav, candidate_mp3, root)
+                mp3_meta["path"] = str(candidate_mp3.relative_to(root))
+
+                candidate_entry = {
+                    "chunkId": chunk["chunkId"],
+                    "speakerId": speaker,
+                    "text": chunk["text"],
+                    "settings": {"seed": inference_seed},
+                    "wav": wav_meta,
+                    "mp3": mp3_meta,
+                }
+                candidate_manifest_path = trial_dir / f"seed-{inference_seed}.manifest.json"
+                write_json_atomic(candidate_manifest_path, {
+                    "status": "complete",
+                    "dryRun": False,
+                    "modelInferenceInvoked": True,
+                    "completedChunks": [candidate_entry],
+                })
+
+                evaluate_command = [
+                    sys.executable,
+                    str(Path(__file__).with_name("evaluate_silma_seed.py")),
+                    "--mp3", str(candidate_mp3),
+                    "--wav", str(candidate_wav),
+                    "--manifest", str(candidate_manifest_path),
+                    "--chunk-id", chunk["chunkId"],
+                    "--maximum-internal-silence", "0.45",
+                    "--duration-tolerance", "0.30",
+                    "--source-text", chunk["text"],
+                ]
+                for successful_duration in successful_durations:
+                    evaluate_command.extend(["--successful-duration", str(successful_duration)])
+                evaluated = subprocess.run(
+                    evaluate_command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if evaluated.returncode not in (0, 1):
+                    raise RuntimeError(
+                        f"Seed evaluator failed for {chunk['chunkId']} seed {inference_seed}: "
+                        f"{evaluated.stderr[-2000:]}"
+                    )
+                try:
+                    evaluation = json.loads(evaluated.stdout)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(
+                        f"Seed evaluator returned invalid JSON for {chunk['chunkId']} seed {inference_seed}"
+                    ) from exc
+                trial = {
+                    "attempt": attempt_number,
+                    "seed": inference_seed,
+                    "durationSeconds": evaluation.get("durationSeconds"),
+                    "longestInternalSilenceSeconds": evaluation.get("longestInternalSilenceSeconds"),
+                    "peakAmplitude": evaluation.get("peakAmplitude"),
+                    "rmsAmplitude": evaluation.get("rmsAmplitude"),
+                    "passesDuration": evaluation.get("passesDuration"),
+                    "passesInternalSilence": evaluation.get("passesInternalSilence"),
+                    "passesPeakAmplitude": evaluation.get("passesPeakAmplitude"),
+                    "passesRms": evaluation.get("passesRms"),
+                    "pass": evaluation.get("pass") is True,
+                    "durationPolicy": evaluation.get("durationPolicy"),
+                    "candidateWav": str(candidate_wav.relative_to(root)),
+                    "candidateMp3": str(candidate_mp3.relative_to(root)),
+                }
+                trial_records.append(trial)
+                print(
+                    "AUTO_SEED_TRIAL " + json.dumps(
+                        {"chunkId": chunk["chunkId"], **trial}, ensure_ascii=False
+                    ),
+                    flush=True,
+                )
+                if evaluation.get("pass") is True:
+                    chosen = {
+                        "seed": inference_seed,
+                        "candidateWav": candidate_wav,
+                        "candidateMp3": candidate_mp3,
+                        "wav": wav_meta,
+                        "mp3": mp3_meta,
+                        "cpuSeconds": cpu_seconds,
+                        "wallSeconds": wall_seconds,
+                        "encodeWallSeconds": encode_wall,
+                        "evaluation": evaluation,
+                    }
+                    successful_durations.append(float(evaluation["durationSeconds"]))
+                    break
+
+            if chosen is None:
+                best = min(
+                    trial_records,
+                    key=lambda item: (
+                        float("inf")
+                        if item.get("longestInternalSilenceSeconds") is None
+                        else item["longestInternalSilenceSeconds"]
+                    ),
+                )
+                failure = {
+                    "chunkId": chunk["chunkId"],
+                    "decision": "REJECTED_NEEDS_SCRIPT_EDIT",
+                    "message": f"{chunk['chunkId']} لم يجتز، يلزم تعديل النص",
+                    "bestRejectedSeed": best["seed"],
+                    "triedSeeds": trial_records,
+                }
+                manifest.setdefault("failedChunks", []).append(failure)
+                manifest.setdefault("autoSeedTrials", {})[chunk["chunkId"]] = trial_records
+                save_progress(root, manifest)
+                print("AUTO_SEED_REJECTED " + json.dumps(failure, ensure_ascii=False), file=sys.stderr, flush=True)
+                raise RuntimeError(failure["message"])
+
+            shutil.copy2(chosen["candidateWav"], final_wav)
+            shutil.copy2(chosen["candidateMp3"], final_mp3)
+            wav_meta = dict(chosen["wav"])
             wav_meta["path"] = str(final_wav.relative_to(root))
+            wav_meta["sha256"] = sha256_file(final_wav)
+            mp3_meta = dict(chosen["mp3"])
+            mp3_meta["path"] = str(final_mp3.relative_to(root))
+            mp3_meta["sha256"] = sha256_file(final_mp3)
 
             timing = {
-                "cpuSeconds": round(cpu_seconds, 6),
-                "wallSeconds": round(wall_seconds, 6),
+                "cpuSeconds": round(chosen["cpuSeconds"], 6),
+                "wallSeconds": round(chosen["wallSeconds"], 6),
                 "audioDurationSeconds": wav_meta["durationSeconds"],
-                "rtf": round(wall_seconds / wav_meta["durationSeconds"], 6),
-                "cpuRtf": round(cpu_seconds / wav_meta["durationSeconds"], 6),
+                "rtf": round(chosen["wallSeconds"] / wav_meta["durationSeconds"], 6),
+                "cpuRtf": round(chosen["cpuSeconds"] / wav_meta["durationSeconds"], 6),
                 "nfeStep": NFE_STEP,
+                "encodeWallSeconds": round(chosen["encodeWallSeconds"], 6),
                 "synthetic": False,
             }
-            manifest["pendingChunk"] = {
-                "chunkId": chunk["chunkId"], "speakerId": speaker,
-                "text": chunk["text"], "timing": timing, "wav": wav_meta,
-                "state": "wav_saved_mp3_pending",
-            }
-            save_progress(root, manifest)
-
-            mp3_meta, encode_wall = make_mp3(final_wav, final_mp3, root)
-            mp3_meta["path"] = str(final_mp3.relative_to(root))
-            timing["encodeWallSeconds"] = round(encode_wall, 6)
             entry = {
                 "chunkId": chunk["chunkId"],
                 "speakerId": speaker,
@@ -625,9 +810,9 @@ def run_real(
                 "settings": {
                     "method": "A", "voice": voice["voice"],
                     "referenceSpeed": voice["speed"], "referencePitch": voice["pitch"],
-                    "synthesisSpeed": 1.0,
-                    "nfeStep": NFE_STEP,
-                    "seed": inference_seed,
+                    "synthesisSpeed": 1.0, "nfeStep": NFE_STEP,
+                    "seed": chosen["seed"],
+                    "seedSelection": "auto-first-passing" if auto_seed else "explicit-or-default",
                 },
                 "reference": reference_details[speaker],
                 "timing": timing,
@@ -635,15 +820,24 @@ def run_real(
                 "mp3": mp3_meta,
                 "synthetic": False,
             }
+            if auto_seed:
+                entry["autoSeedTrials"] = trial_records
+                manifest.setdefault("autoSeedTrials", {})[chunk["chunkId"]] = trial_records
             manifest["completedChunks"].append(entry)
-            manifest.pop("pendingChunk", None)
             save_progress(root, manifest)
             print(json.dumps({
-                "checkpoint": index, "total": len(CHUNKS),
-                "chunkId": chunk["chunkId"], "speaker": voice["labelArabic"],
-                "cpuSeconds": timing["cpuSeconds"], "wallSeconds": timing["wallSeconds"],
-                "durationSeconds": timing["audioDurationSeconds"], "rtf": timing["rtf"],
-                "wavSha256": wav_meta["sha256"], "mp3Sha256": mp3_meta["sha256"],
+                "checkpoint": index,
+                "total": len(CHUNKS),
+                "chunkId": chunk["chunkId"],
+                "speaker": voice["labelArabic"],
+                "chosenSeed": chosen["seed"],
+                "trials": trial_records,
+                "cpuSeconds": timing["cpuSeconds"],
+                "wallSeconds": timing["wallSeconds"],
+                "durationSeconds": timing["audioDurationSeconds"],
+                "rtf": timing["rtf"],
+                "wavSha256": wav_meta["sha256"],
+                "mp3Sha256": mp3_meta["sha256"],
             }, ensure_ascii=False), flush=True)
 
         if len(manifest["completedChunks"]) != len(active_chunks):
@@ -760,6 +954,11 @@ def main() -> int:
         type=int,
         help="Explicit deterministic SILMA seed; requires --only-chunk-id.",
     )
+    parser.add_argument(
+        "--auto-seed",
+        action="store_true",
+        help="Try exactly five deterministic seeds per chunk and keep the first candidate passing every strict gate.",
+    )
     args = parser.parse_args()
 
     global CHUNKS, EPISODE_ID, SCRIPT_MANIFEST_SHA256
@@ -767,16 +966,16 @@ def main() -> int:
     script_data = json.loads(script_path.read_text(encoding="utf-8"))
     if script_data.get("schemaVersion") != 1 or script_data.get("status") != "approved-script":
         raise RuntimeError("Script manifest must have schemaVersion=1 and status=approved-script")
-    if script_data.get("episodeId") != "letter-alif":
-        raise RuntimeError("Expected letter-alif episode manifest")
+    episode_id = script_data.get("episodeId")
+    if not isinstance(episode_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", episode_id):
+        raise RuntimeError("episodeId must be a lowercase slug")
     chunks = script_data.get("chunks")
-    if not isinstance(chunks, list) or len(chunks) != 8:
-        raise RuntimeError("Episode manifest must contain exactly eight chunks")
+    if not isinstance(chunks, list) or not 1 <= len(chunks) <= 16:
+        raise RuntimeError("Episode manifest must contain between one and sixteen chunks per generation run")
     ids: set[str] = set()
-    expected_speakers = ["pistachio", "hazelnut"] * 4
     for index, item in enumerate(chunks):
-        if not isinstance(item, dict) or item.get("speakerId") != expected_speakers[index]:
-            raise RuntimeError(f"Unexpected speaker or order in chunk {index + 1}")
+        if not isinstance(item, dict) or item.get("speakerId") not in PERSONAS:
+            raise RuntimeError(f"Unknown speaker in chunk {index + 1}")
         chunk_id = item.get("chunkId")
         source_text = item.get("text")
         if not isinstance(chunk_id, str) or not chunk_id.strip() or chunk_id in ids:
@@ -786,13 +985,17 @@ def main() -> int:
         ids.add(chunk_id)
     if args.seed is not None and args.only_chunk_id is None:
         raise RuntimeError("--seed requires --only-chunk-id")
-    if args.only_chunk_id is not None and args.seed is None:
-        raise RuntimeError("--only-chunk-id requires an explicit --seed")
+    if args.seed is not None and args.auto_seed:
+        raise RuntimeError("--seed and --auto-seed are mutually exclusive")
+    if args.only_chunk_id is not None and args.seed is None and not args.auto_seed:
+        raise RuntimeError("--only-chunk-id requires --seed or --auto-seed")
     if args.seed is not None and not 0 <= args.seed <= 2**31 - 1:
         raise RuntimeError("--seed must be between 0 and 2147483647")
     select_chunks(chunks, args.only_chunk_id)
     if args.dry_run and args.only_chunk_id is not None:
         raise RuntimeError("--dry-run cannot be combined with --only-chunk-id")
+    if args.dry_run and args.auto_seed:
+        raise RuntimeError("--dry-run cannot be combined with --auto-seed")
 
     CHUNKS = chunks
     EPISODE_ID = script_data["episodeId"]
@@ -813,6 +1016,7 @@ def main() -> int:
         started,
         args.only_chunk_id,
         args.seed,
+        args.auto_seed,
     )
 
 

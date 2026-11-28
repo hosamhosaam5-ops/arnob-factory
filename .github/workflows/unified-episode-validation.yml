@@ -1,0 +1,124 @@
+name: Unified episode pull-request preflight (dry run only)
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: unified-episode-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout feature head with two commits of history
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Install validation tools and run static tests
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y ffmpeg
+          python3 -m pip install --disable-pip-version-check --no-input "ruff==0.14.10" Pillow
+          ruff check .
+          python3 -m compileall -q scripts tests
+          python3 -m unittest discover -s tests -v
+          node --check scripts/letter_card_qa.mjs
+          node --check src/production/audio-mixer.js
+          node --check src/production/video-qa.js
+          for file in scripts/*.sh; do [ -f "$file" ] || continue; bash -n "$file"; done
+          echo "STATIC_TESTS_AND_SYNTAX=PASS"
+
+      - name: Download fixed calibration artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 15253057317
+          run-id: 46119257810
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          path: calibration
+
+      - name: Download approved Run 8 source evidence
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          artifact-ids: 15257366397
+          run-id: 46130035251
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          path: run8
+
+      - name: Check exact artifact identities, committed references and ready audio
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p preflight-evidence
+          test "$(gh api "repos/$REPOSITORY/actions/artifacts/15253057317" --jq '.digest')" = \
+            "sha256:9f611770a90f2d5fffc99fafae2f8d74e9a5802e61037fd6971fc4f141930270"
+          test "$(gh api "repos/$REPOSITORY/actions/artifacts/15257366397" --jq '.digest')" = \
+            "sha256:fd9f5ea62e2413dc5b1fdfb9a76c86cd15a965d707fdef69593c3f9c93336c6b"
+          CAL="$GITHUB_WORKSPACE/calibration/silma-chunk-03-calibration-seed-trials-46119257810/artifacts/seed-trials/selected-candidate"
+          RUN8="$GITHUB_WORKSPACE/run8/letter-card-alif-007-46130035251"
+          test -s "$CAL/chunks/03-pistachio.wav"
+          test -s "$CAL/chunks/03-pistachio.mp3"
+          test -s "$RUN8/build/letter-card/letter-card-episode.mp4"
+          test -s "$RUN8/build/letter-card/video-qa-report.json"
+          bash scripts/prepare_silma_method_a.sh "$RUNNER_TEMP/approved-references" \
+            | tee preflight-evidence/reference-preflight.log
+          python scripts/evaluate_silma_seed.py \
+            --mp3 "$CAL/chunks/03-pistachio.mp3" \
+            --wav "$CAL/chunks/03-pistachio.wav" \
+            --manifest "$CAL/manifest.json" \
+            --chunk-id chunk-03 --expected-duration 2.54 \
+            --duration-tolerance 0.30 --maximum-internal-silence 0.45 \
+            > preflight-evidence/ready-clip-silence-check.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result=json.loads(Path("preflight-evidence/ready-clip-silence-check.json").read_text())
+          assert result["pass"] is True, result
+          print(json.dumps({k:result[k] for k in (
+            "chunkId","seed","durationSeconds","longestInternalSilenceSeconds",
+            "peakAmplitude","passesDuration","passesInternalSilence","passesPeakAmplitude"
+          )},indent=2))
+          PY
+          echo "SOURCE_ARTIFACTS_AND_READY_AUDIO=PASS"
+
+      - name: Run one synthetic dry run without SILMA or rendering
+        run: |
+          set -euo pipefail
+          python scripts/silma_episode.py \
+            --episode-manifest assets/episodes/letter-alif.json \
+            --output-dir "$RUNNER_TEMP/unified-validation-dry-run" \
+            --references-dir "$RUNNER_TEMP/approved-references" \
+            --dry-run \
+            2>&1 | tee preflight-evidence/dry-run.log
+          jq -e '.status=="complete" and .dryRun==true and .modelInferenceInvoked==false and .weights.silma.status=="not_downloaded"' \
+            "$RUNNER_TEMP/unified-validation-dry-run/manifest.json" >/dev/null
+          echo "PR_DRY_RUN=PASS"
+          echo "SILMA_INFERENCE=NOT_INVOKED"
+          echo "RENDERER=NOT_INVOKED"
+
+      - name: Upload preflight evidence regardless of gate outcome
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: unified-episode-pr-preflight-${{ github.event.pull_request.number }}
+          path: |
+            preflight-evidence/**
+            ${{ runner.temp }}/unified-validation-dry-run/**
+          if-no-files-found: ignore
+          compression-level: 0
+          retention-days: 14

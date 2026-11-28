@@ -32,10 +32,10 @@ PALETTE = {
 }
 PAUSE_SECONDS = 0.20
 TRIM_FILTER = (
-    "areverse,silenceremove=start_periods=1:start_duration=0.02:"
-    "start_threshold=-50dB:start_silence=0:detection=rms,areverse,"
-    "silenceremove=stop_periods=-1:stop_duration=0.3:"
-    "stop_threshold=-50dB:stop_silence=0.15:detection=rms"
+    "silenceremove=start_periods=1:start_duration=0.02:"
+    "start_threshold=-50dB:start_silence=0.08:window=0.02,areverse,"
+    "silenceremove=start_periods=1:start_duration=0.02:"
+    "start_threshold=-50dB:start_silence=0.08:window=0.02,areverse"
 )
 
 
@@ -74,22 +74,22 @@ def load_sources(input_dir: Path) -> tuple[dict, list[dict], list[Path]]:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if manifest.get("status") != "complete" or manifest.get("dryRun") is not False:
         raise RuntimeError("Source manifest is not a completed non-dry-run episode")
-    if manifest.get("episodeId") != "episode-pilot-1":
+    episode_id = manifest.get("episodeId")
+    if not isinstance(episode_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", episode_id):
         raise RuntimeError("Unexpected episode identifier")
     chunks = manifest.get("completedChunks", [])
-    if len(chunks) != 8:
-        raise RuntimeError(f"Expected exactly 8 approved chunks, received {len(chunks)}")
+    if not isinstance(chunks, list) or not 1 <= len(chunks) <= 16:
+        raise RuntimeError(f"Expected between one and sixteen approved chunks, received {len(chunks)}")
     sources: list[Path] = []
-    expected_speakers = ["pistachio", "hazelnut"] * 4
     expected_audio_names = {Path(str(item.get("wav", {}).get("path", ""))).name for item in chunks}
     actual_audio_names = {item.name for item in (input_dir / "chunks").iterdir() if item.is_file()}
     if actual_audio_names != expected_audio_names:
-        raise RuntimeError("Audio input directory must contain only the eight manifest-approved WAV files")
+        raise RuntimeError("Audio input directory must contain only the manifest-approved WAV files")
     if any(Path(name).suffix.lower() != ".wav" for name in expected_audio_names):
         raise RuntimeError("Only WAV assets are permitted in the input set")
     for index, item in enumerate(chunks):
-        if item.get("speakerId") != expected_speakers[index]:
-            raise RuntimeError(f"Unexpected speaker order in {item.get('chunkId')}")
+        if item.get("speakerId") not in {"pistachio", "hazelnut"}:
+            raise RuntimeError(f"Unknown speaker in {item.get('chunkId')}")
         wav_meta = item.get("wav") or {}
         rel = Path(str(wav_meta.get("path", "")))
         if rel.is_absolute() or rel.parent != Path("chunks") or rel.name in ("", ".", ".."):
@@ -704,7 +704,10 @@ def render(args) -> dict:
     total_frames = math.ceil(audio_duration * FPS)
     frame_rows: list[tuple[int, int, float, float]] = []
     boundaries = [scene["startSeconds"] for scene in scenes]
-    selected_scene_ids = {0} if args.smoke_seconds is not None else set(SELECTED_PREVIEW_SCENE_IDS)
+    selected_scene_ids = (
+        {0} if args.smoke_seconds is not None
+        else {index for index in SELECTED_PREVIEW_SCENE_IDS if index < len(chunks)}
+    )
     selected_frame_numbers: set[int] = set()
     for scene_index in selected_scene_ids:
         center = (scenes[scene_index]["startSeconds"] + scenes[scene_index]["endSeconds"]) / 2

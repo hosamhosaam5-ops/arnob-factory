@@ -8,6 +8,7 @@ import json
 import math
 import subprocess
 import sys
+import wave
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,17 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+
+def pcm_sha256(path: Path) -> tuple[str, int, int, int, int]:
+    with wave.open(str(path), "rb") as stream:
+        channels = stream.getnchannels()
+        sample_rate = stream.getframerate()
+        sample_width = stream.getsampwidth()
+        samples = stream.getnframes()
+        pcm = stream.readframes(samples)
+    return hashlib.sha256(pcm).hexdigest(), channels, sample_rate, sample_width, samples
 
 
 def probe_media(path: Path) -> dict[str, Any]:
@@ -71,8 +83,8 @@ def main() -> int:
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     script = json.loads(script_path.read_text(encoding="utf-8"))
-    if report.get("episodeId") != "letter-alif" or script.get("episodeId") != "letter-alif":
-        fail("Unexpected episode identifier")
+    if not isinstance(script.get("episodeId"), str) or report.get("episodeId") != script.get("episodeId"):
+        fail("Episode identifier differs from the approved script")
     if report.get("status") != "complete":
         fail("SILMA generation did not complete")
     if report.get("dryRun") is not False or report.get("modelInferenceInvoked") is not True:
@@ -82,10 +94,10 @@ def main() -> int:
 
     expected_chunks = script.get("chunks")
     completed_chunks = report.get("completedChunks", [])
-    if not isinstance(expected_chunks, list) or len(expected_chunks) != 8:
-        fail("Input script must contain exactly eight chunks")
-    if len(completed_chunks) != 8 or report.get("chunksPlanned") != 8:
-        fail("Expected exactly eight completed chunks")
+    if not isinstance(expected_chunks, list) or not 1 <= len(expected_chunks) <= 16:
+        fail("Input script must contain between one and sixteen chunks per run")
+    if len(completed_chunks) != len(expected_chunks) or report.get("chunksPlanned") != len(expected_chunks):
+        fail("Completed chunk count differs from the selected script segment")
 
     script_sha = sha256_file(script_path)
     if report.get("episodeScriptSha256") != script_sha:
@@ -153,17 +165,25 @@ def main() -> int:
         if weight.get("verifiedBeforeInference") is not True:
             fail(f"{name} was not verified before inference")
 
-    reference_hashes: dict[str, str] = {}
+    reference_pcm_hashes: dict[str, str] = {}
     for persona in ("pistachio", "hazelnut"):
         reference = report.get("references", {}).get(persona, {})
         relative_path = Path(reference.get("path", ""))
         if relative_path.is_absolute() or ".." in relative_path.parts:
-            fail(f"Unsafe generated reference path: {persona}")
+            fail(f"Unsafe committed PCM reference path: {persona}")
         reference_path = output_dir / "references" / relative_path
-        actual_hash = sha256_file(reference_path) if reference_path.is_file() else None
-        if actual_hash != reference.get("sha256"):
-            fail(f"Generated eSpeak reference SHA-256 mismatch: {persona}")
-        reference_hashes[persona] = actual_hash
+        if not reference_path.is_file():
+            fail(f"Missing committed PCM reference: {persona}")
+        actual_pcm, channels, sample_rate, sample_width, samples = pcm_sha256(reference_path)
+        if (channels, sample_rate, sample_width) != (1, 24000, 2):
+            fail(f"Committed PCM reference format mismatch: {persona}")
+        if actual_pcm != reference.get("pcmSha256"):
+            fail(f"Committed PCM reference SHA-256 mismatch: {persona}")
+        if samples != reference.get("samples"):
+            fail(f"Committed PCM reference sample count mismatch: {persona}")
+        if reference.get("verification") != "pcm-sha256-only":
+            fail(f"Reference verification mode mismatch: {persona}")
+        reference_pcm_hashes[persona] = actual_pcm
 
     measurement = report.get("measurementSummary", {})
     total_wall = measurement.get("totalInferenceWallSeconds")
@@ -183,7 +203,7 @@ def main() -> int:
                     key: report["weights"][key]["sha256"]
                     for key in EXPECTED_WEIGHT_SHA256
                 },
-                "references": reference_hashes,
+                "referencePcmSha256": reference_pcm_hashes,
                 "totalInferenceWallSeconds": total_wall,
                 "totalInferenceCpuSeconds": total_cpu,
                 "mp3Files": [item["mp3"]["path"] for item in completed_chunks],

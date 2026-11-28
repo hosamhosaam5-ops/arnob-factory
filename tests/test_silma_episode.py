@@ -58,6 +58,16 @@ class SilmaSeedTests(unittest.TestCase):
         self.assertEqual(silma.resolve_seed(3, None), 4245)
         self.assertEqual(silma.resolve_seed(3, 50123), 50123)
 
+    def test_auto_seed_sequence_is_exactly_five_candidates_from_4242_plus_index(self):
+        self.assertEqual(silma.auto_seed_candidates(3), [4245, 4246, 4247, 4248, 4249])
+        self.assertEqual(len(silma.auto_seed_candidates(3)), 5)
+
+    def test_auto_seed_run_chunk_cap_preserves_forty_minute_budget(self):
+        self.assertEqual(silma.AUTO_SEED_ATTEMPTS, 5)
+        self.assertEqual(silma.AUTO_SEED_MAX_CHUNKS_PER_RUN, 16)
+        self.assertEqual(silma.AUTO_SEED_ATTEMPTS * silma.AUTO_SEED_MAX_CHUNKS_PER_RUN * 23, 1840)
+        self.assertLess(1840, 40 * 60)
+
     def test_invalid_seed_is_rejected(self):
         for seed in (-1, 2**31):
             with self.assertRaises(ValueError):
@@ -116,6 +126,21 @@ class SilmaSeedTests(unittest.TestCase):
         intervals = evaluator.parse_internal_silences(log, 2.552)
         self.assertEqual(len(intervals), 1)
         self.assertAlmostEqual(intervals[0]["durationSeconds"], 0.422)
+
+    def test_arabic_character_duration_window_contains_measured_chunk_three(self):
+        text = "أَلِف... أَرْنَب! أَرْنَبٌ صَغِيرٌ يَقْفِزُ."
+        minimum, maximum, mean = evaluator.duration_window(text, None, 0.30)
+        self.assertIsNone(mean)
+        self.assertLessEqual(minimum, 2.420917)
+        self.assertGreaterEqual(maximum, 2.420917)
+
+    def test_successful_same_text_durations_use_plus_minus_point_three_seconds(self):
+        minimum, maximum, mean = evaluator.duration_window(
+            "أَرْنَبٌ", [2.4, 2.6], 0.30
+        )
+        self.assertAlmostEqual(mean, 2.5)
+        self.assertAlmostEqual(minimum, 2.2)
+        self.assertAlmostEqual(maximum, 2.8)
 
     def test_single_chunk_merge_updates_only_target_and_preserves_other_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
