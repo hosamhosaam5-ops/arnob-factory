@@ -12,8 +12,9 @@ if (!generationArg || !renderArg || !['all','audio-mix','video-qa'].includes(pha
 }
 const generationDir=path.resolve(generationArg), renderDir=path.resolve(renderArg);
 const manifestPath=path.join(generationDir,'manifest.json');
-const rawVideo=path.join(renderDir,'letter-card-video-raw.mp4');
-const voiceTrack=path.join(renderDir,'episode-audio.wav');
+const renderReportPath=path.join(renderDir,'render-report.json');
+const rawVideoDefault=path.join(renderDir,'letter-card-video-raw.mp4');
+const voiceTrackDefault=path.join(renderDir,'episode-audio.wav');
 const silentBed=path.join(renderDir,'digital-silence-bed.wav');
 const mixedWav=path.join(renderDir,'episode-audio-mix.wav');
 const finalVideo=path.join(renderDir,'letter-card-episode.mp4');
@@ -55,7 +56,7 @@ function run(command,args,timeoutMs=180000){
 async function verifySources(){
  const manifest=JSON.parse(await readFile(manifestPath,'utf8'));
  ensure(manifest.status==='complete'&&manifest.dryRun===false&&manifest.modelInferenceInvoked===true,'SILMA manifest is not a completed real generation');
- ensure(manifest.episodeId==='letter-alif'&&Array.isArray(manifest.completedChunks)&&manifest.completedChunks.length===8,'Expected exactly eight letter-alif chunks');
+ ensure(typeof manifest.episodeId==='string'&&Array.isArray(manifest.completedChunks)&&manifest.completedChunks.length>=1&&manifest.completedChunks.length<=16,'Expected one to sixteen completed episode chunks');
  const files=[];
  for(const chunk of manifest.completedChunks){
   for(const key of ['wav','mp3']){
@@ -69,6 +70,12 @@ async function verifySources(){
 }
 async function audioMix(){
  const sources=await verifySources();
+ const renderReport=JSON.parse(await readFile(renderReportPath,'utf8'));
+ const rawVideoName=renderReport.rawVideo?.path ?? renderReport.picture?.file ?? path.basename(rawVideoDefault);
+ const voiceTrackName=renderReport.voiceTrack?.path ?? renderReport.audioProcessing?.voiceTrackPath ?? path.basename(voiceTrackDefault);
+ const rawVideo=path.resolve(renderDir,rawVideoName);
+ const voiceTrack=path.resolve(renderDir,voiceTrackName);
+ ensure(rawVideo.startsWith(renderDir+path.sep)&&voiceTrack.startsWith(renderDir+path.sep),'Unsafe render-report media path');
  await requireFile(rawVideo,'Raw rendered H.264 video');
  await requireFile(voiceTrack,'Rendered voice track');
  await run('ffmpeg',['-hide_banner','-nostdin','-loglevel','error','-y','-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t','1','-ar','48000','-ac','2','-c:a','pcm_s16le',silentBed]);
