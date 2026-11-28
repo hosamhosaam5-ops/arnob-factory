@@ -1,0 +1,18 @@
+{
+  "episodeId": "letter-alif",
+  "confirm_new_episode_run": true,
+  "runNumber": 8,
+  "expectedBranch": "feat/letter-card-silma-20261127",
+  "expectedParent": "796feb6dac66f416f79de679bb623e0e1b877f4e",
+  "run6ArtifactId": 46068424765,
+  "calibrationRunId": 46119257810,
+  "calibrationArtifactId": 15253057317,
+  "seed": 4250,
+  "candidateSha256": {
+    "wav": "3649358adab289d936bfe09551624f646bc5b35b1f43eef0b44739da802ae3da",
+    "mp3": "3a9459f3115007cdd0e6871b72367c45bb589e654ce293ae3d886bd2756502f8"
+  },
+  "referenceApprovalManifest": "assets/references/pistachio-method-a-approval.json",
+  "dryRun": false,
+  "note": "Owner-authorized single run #8 using Run #6 media with only chunk-03 replaced by approved seed 4250; run_attempt=1; no retry."
+}
